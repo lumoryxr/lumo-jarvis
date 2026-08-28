@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSession, buildBriefing } from '../state/session';
 import { PanelHead, StatusChip, Progress } from './primitives';
+import { ProactivenessPanel } from './ProactivenessPanel';
 import type { Task, TaskStatus } from '../core/types';
 import './TaskBoard.css';
 
@@ -88,7 +89,8 @@ function TaskCard({ task }: { task: Task }) {
 }
 
 /**
- * Right rail: the rolled-up briefing on top, the live task list below.
+ * Right rail: the rolled-up briefing on top, the live task list below,
+ * and the proactiveness regulator at the bottom (P0-D).
  *
  * The briefing exists because a list of five cards is not an answer to "what is
  * going on" — it answers "what needs me, and what is moving".
@@ -159,6 +161,9 @@ export function TaskBoard() {
           {visible.length === 0 && <li className="board__empty">这一栏是空的。</li>}
         </ul>
       </section>
+
+      {/* P0-D: proactiveness regulator + active proposals. */}
+      <ProactivenessPanel />
     </aside>
   );
 }

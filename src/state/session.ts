@@ -4,13 +4,15 @@ import type {
 } from '../core/types';
 import type { Provider } from '../services/provider';
 import { MockBackend } from '../services/mock';
+import { DEFAULT_WATCHERS } from '../services/watchers';
 import { usePersona, startMemoryDecay } from './persona';
+import { useProactiveness, startProactivenessDailyReset } from './proactiveness';
 
 /**
  * Single source of truth for the whole window.
  *
  * Swap the provider here to go from prototype to production:
- *   const provider: Provider = new MockBackend();
+ *   const provider: Provider = new MockBackend({ watchers: DEFAULT_WATCHERS });
  *   const provider: Provider = new TauriProvider();   // real OS + Hermes
  *
  * P0-A: persona / mood / memory lives in a *separate* zustand store
@@ -18,8 +20,12 @@ import { usePersona, startMemoryDecay } from './persona';
  * single-purpose and avoids accidentally coupling emotional state to work
  * state. The two stores communicate only through `ProviderEvent`s on the
  * wire — see the companion-layer branches at the bottom of `boot()`.
+ *
+ * P0-D: `state/proactiveness` controls *whether* a watcher can fire right
+ * now. The mock backend runs the actual watcher loop; the production
+ * backend will do the same against real OS / Hermes signals.
  */
-const provider: Provider = new MockBackend();
+const provider: Provider = new MockBackend({ watchers: DEFAULT_WATCHERS });
 
 const EMPTY_COUNTS: Record<TaskStatus, number> = {
   queued: 0, running: 0, blocked: 0, review: 0, done: 0, failed: 0, cancelled: 0,
@@ -149,6 +155,12 @@ export const useSession = create<SessionState>((set) => ({
     void provider.start().then(() => set({ agentState: 'idle' }));
     // Memories decay slowly in the background. No-op if no memories exist.
     startMemoryDecay();
+    // P0-D: midnight reset for the daily proposal cap.
+    startProactivenessDailyReset();
+    // Reference the store so tree-shakers don't drop the import — the
+    // ProactivenessPanel subscribes to it directly, but the reset interval
+    // lives here.
+    void useProactiveness;
   },
 
   send: (text) => {

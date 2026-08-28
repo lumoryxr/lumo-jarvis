@@ -1,0 +1,241 @@
+/* ==========================================================================
+   Proactiveness panel — right rail, lives below the briefing.
+   ========================================================================== */
+
+.props {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.props__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.props__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.props__dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 10px var(--gold);
+  animation: pulse 2.2s var(--ease) infinite;
+}
+.props__title .label {
+  color: var(--gold);
+  letter-spacing: 0.20em;
+}
+
+.props__stats {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-dim);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.props__stats .mono { color: var(--ink); font-weight: 600; }
+.props__sep { color: var(--ink-faint); }
+
+/* --- band pills ------------------------------------------------------- */
+
+.props__bands {
+  display: flex;
+  gap: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 2px;
+  background: rgba(4, 10, 18, 0.4);
+}
+.props__band {
+  flex: 1;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  color: var(--ink-faint);
+}
+.props__band .label { font-size: 9px; letter-spacing: 0.18em; color: inherit; }
+.props__band:hover { color: var(--ink-dim); }
+.props__band.is-on {
+  background: rgba(255, 179, 71, 0.14);
+  color: var(--gold);
+  box-shadow: inset 0 0 0 1px var(--hairline-bright);
+}
+.props__band.is-on .label { color: var(--gold); text-shadow: 0 0 10px rgba(255, 179, 71, 0.4); }
+.props__band--settings { flex: 0 0 auto; padding: 4px 10px; }
+
+.props__quiet {
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--hairline);
+  border-radius: 6px;
+  background: rgba(4, 10, 18, 0.4);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+/* --- custom settings panel ------------------------------------------ */
+
+.props__settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: rgba(4, 10, 18, 0.4);
+  animation: rise 220ms var(--ease);
+}
+
+.props__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.props__row .label { width: 60px; }
+.props__row input[type="range"] {
+  flex: 1;
+  accent-color: var(--gold);
+}
+.props__row input[type="number"] {
+  width: 44px;
+  padding: 2px 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: rgba(4, 10, 18, 0.6);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: right;
+  outline: none;
+}
+.props__row input[type="number"]:focus { border-color: var(--hairline-bright); }
+.props__num {
+  width: 36px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+.props__triggers {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+}
+.props__trigger label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+.props__trigger input { accent-color: var(--gold); }
+.props__trigger .label { color: inherit; letter-spacing: 0.14em; font-size: 10px; }
+
+/* --- proposal list --------------------------------------------------- */
+
+.props__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.props__empty {
+  padding: 12px 4px;
+  font-size: 12px;
+  color: var(--ink-faint);
+  text-align: center;
+  font-style: italic;
+}
+
+.props__item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 12px;
+  border: 1px solid var(--hairline);
+  border-left: 2px solid var(--tint, var(--gold));
+  border-radius: 8px;
+  background: rgba(4, 10, 18, 0.4);
+  animation: rise 280ms var(--ease);
+}
+
+.props__item-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.props__trigger-tag {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: var(--tint, var(--gold));
+  text-transform: uppercase;
+}
+.props__conf {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.props__reason {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.props__suggest {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px dashed var(--hairline);
+  border-radius: 6px;
+  background: rgba(4, 10, 18, 0.5);
+  font-size: 11px;
+}
+.props__suggest-arrow { color: var(--tint, var(--gold)); font-weight: 600; }
+.props__suggest-title { color: var(--ink-dim); }
+
+.props__item-actions {
+  display: flex;
+  gap: 6px;
+}
+.props__btn {
+  padding: 3px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.props__btn:hover {
+  background: rgba(120, 220, 255, 0.08);
+  color: var(--cyan-soft);
+}
+.props__btn.is-primary {
+  background: rgba(255, 179, 71, 0.18);
+  color: var(--gold);
+  border-color: rgba(255, 179, 71, 0.40);
+}
+.props__btn.is-primary:hover {
+  background: rgba(255, 179, 71, 0.26);
+}

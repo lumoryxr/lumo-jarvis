@@ -3,6 +3,8 @@ import type {
   Emotion, Memory, Mood, PersonaAction, PersonaPreset, Proposal, Task, TaskStatus,
   MachineSnapshot, Metric, ToolCall,
 } from '../core/types';
+import { useProactiveness } from '../state/proactiveness';
+import { runWatchers, type WatcherSnapshot, type Watcher } from './watchers';
 
 /**
  * The prototype's stand-in for a real backend.
@@ -15,6 +17,9 @@ import type {
  *      greets the user with a `mood` + `emotion`, listens for memory-shaped
  *      facts in user input, plays scripted emotions/actions in response,
  *      and fires proactive proposals at sensible intervals.
+ *   3. P0-D: a real `Watcher` engine synthesises signals (disk / metric /
+ *      process / ci / time) and emits Proposals through the same
+ *      Proactiveness policy the production backend will use.
  *
  * Every event it emits is one the real providers also emit — swapping
  * `MockBackend` for `HermesProvider` is a one-line change in
@@ -43,7 +48,7 @@ const PROC_NAMES = ['node', 'rustc', 'hermes-agent', 'chrome', 'Code Helper', 'd
 const TASK_SEEDS: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'steps'>[] = [
   {
     title: '重构 payments 模块的错误处理',
-    intent: '把散落的 try/catch 收敛成统一的 Result 类型，并补上单测',
+    intent: '把散落的 try/catch 收敛成统一的 Result 类型,并补上单测',
     executor: 'hermes',
     status: 'running',
     progress: 0.62,
@@ -53,7 +58,7 @@ const TASK_SEEDS: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'steps'>[] = [
   },
   {
     title: '给 Tauri 内核加上进程守护',
-    intent: '子进程崩溃后自动重启，带指数退避与日志留存',
+    intent: '子进程崩溃后自动重启,带指数退避与日志留存',
     executor: 'hermes',
     status: 'queued',
     progress: 0,
@@ -62,28 +67,28 @@ const TASK_SEEDS: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'steps'>[] = [
   },
   {
     title: '清理 ~/Downloads 里 30 天前的安装包',
-    intent: '按扩展名与修改时间筛选，先出清单再执行',
+    intent: '按扩展名与修改时间筛选,先出清单再执行',
     executor: 'local',
     status: 'review',
     progress: 1,
     project: 'workstation',
     tags: ['fs', 'needs-approval'],
-    result: '找到 41 个文件，合计 12.4 GB。等待你确认后删除。',
+    result: '找到 41 个文件,合计 12.4 GB。等待你确认后删除。',
   },
   {
     title: '每日构建流水线失败复盘',
-    intent: '拉取最近 5 次 CI 日志，定位共同失败点',
+    intent: '拉取最近 5 次 CI 日志,定位共同失败点',
     executor: 'hermes',
     status: 'done',
     progress: 1,
     project: 'lumo-core',
     tags: ['ci', 'analysis'],
     externalId: 'run_2b8c04',
-    result: '5 次失败中 4 次源于 node-gyp 在 arm64 上的缓存竞态，已提交 PR #212。',
+    result: '5 次失败中 4 次源于 node-gyp 在 arm64 上的缓存竞态,已提交 PR #212。',
   },
   {
     title: '同步 Notion 上的产品需求到本地',
-    intent: '增量拉取，冲突时保留本地版本',
+    intent: '增量拉取,冲突时保留本地版本',
     executor: 'local',
     status: 'failed',
     progress: 0.35,
@@ -140,8 +145,8 @@ const SCRIPTS: Script[] = [
     match: /(内存|memory|cpu|性能|卡)/i,
     reply: [
       '我看了一下：内存压力来自 ',
-      '`node` 的三个 Vite 实例，合计 6.2 GB。',
-      '\n\n其中两个的父终端已经退出，属于孤儿进程。要我结束它们吗？',
+      '`node` 的三个 Vite 实例,合计 6.2 GB。',
+      '\n\n其中两个的父终端已经退出,属于孤儿进程。要我结束它们吗?',
     ],
     tools: [
       { name: 'os.processes', summary: 'ps aux --sort=-%mem | head -20', output: 'node 6.2G · rustc 1.8G · chrome 1.1G' },
@@ -154,13 +159,13 @@ const SCRIPTS: Script[] = [
     match: /(写|开发|实现|重构|代码|code|refactor|implement)/i,
     reply: [
       '已经把这件事下发给 Hermes 了。',
-      '\n\n我给它的约束是：先出计划再动手，改动限制在目标模块内，跑完测试才算完成。',
+      '\n\n我给它的约束是：先出计划再动手,改动限制在目标模块内,跑完测试才算完成。',
       '进度会直接推到右边的任务板上。',
     ],
     tools: [{ name: 'hermes.dispatch', summary: 'POST /v1/runs', output: 'run_9d4e12 · started' }],
     task: {
       title: '按你的描述实现新功能',
-      intent: '交给 Hermes 执行，完成后回报 diff 与测试结果',
+      intent: '交给 Hermes 执行,完成后回报 diff 与测试结果',
       executor: 'hermes',
       project: 'lumo-core',
       tags: ['hermes', 'coding'],
@@ -171,8 +176,8 @@ const SCRIPTS: Script[] = [
   {
     match: /(任务|进度|状态|汇总|task|status|summary)/i,
     reply: [
-      '当前 5 个任务：1 个在跑，1 个排队，1 个等你拍板，1 个已完成，1 个失败。',
-      '\n\n需要你介入的是「清理 Downloads」——它列好了 41 个文件共 12.4 GB，等确认；',
+      '当前 5 个任务：1 个在跑,1 个排队,1 个等你拍板,1 个已完成,1 个失败。',
+      '\n\n需要你介入的是「清理 Downloads」——它列好了 41 个文件共 12.4 GB,等确认;',
       '还有 Notion 同步的令牌过期了。',
     ],
     mood: { valence: 0.0, arousal: 0.1, dominance: 0.15, intimacy: 0.4 },
@@ -183,7 +188,7 @@ const SCRIPTS: Script[] = [
     match: /(喜欢|想你|在吗|陪|陪我|你好)/i,
     reply: [
       '在呢。',
-      '\n\n今天感觉怎么样？是要干活，还是就聊会儿？',
+      '\n\n今天感觉怎么样?是要干活,还是就聊会儿?',
     ],
     mood: { valence: 0.55, arousal: 0.45, dominance: 0.0, intimacy: 0.55 },
     emotion: { emotion: 'playful', intensity: 0.7, trigger: 'user reaching out' },
@@ -193,8 +198,8 @@ const SCRIPTS: Script[] = [
     /* "我累了 / 烦 / 压力大" — soften, don't fix. */
     match: /(累|烦|压力|心情不好|郁闷|焦虑|难过)/i,
     reply: [
-      '嗯，听到了。',
-      '\n\n要不要先去倒杯水？我把 Hermes 那边的非关键任务先暂停一会儿，你回来再说。',
+      '嗯,听到了。',
+      '\n\n要不要先去倒杯水?我把 Hermes 那边的非关键任务先暂停一会儿,你回来再说。',
     ],
     mood: { valence: -0.15, arousal: -0.35, dominance: -0.2, intimacy: 0.6 },
     emotion: { emotion: 'tender', intensity: 0.7, trigger: 'user is tired' },
@@ -204,10 +209,10 @@ const SCRIPTS: Script[] = [
     /* "帮我看看 Notion / 同步" — task-shaped, but with empathy in the voice. */
     match: /(notion|同步|令牌|过期)/i,
     reply: [
-      '我看了一下 Notion 集成，',
-      '令牌 9 月 12 日到期，刷新密钥的入口在 ',
+      '我看了一下 Notion 集成,',
+      '令牌 9 月 12 日到期,刷新密钥的入口在 ',
       '`lumo-core/integrations/notion.toml`。',
-      '\n\n要不要我现在帮你切到新密钥，并把上次失败的那次同步重跑一次？',
+      '\n\n要不要我现在帮你切到新密钥,并把上次失败的那次同步重跑一次?',
     ],
     tools: [{ name: 'os.inspect', summary: 'cat integrations/notion.toml', output: 'token = "expired 2024-09-12"' }],
     mood: { valence: 0.1, arousal: 0.15, dominance: 0.25, intimacy: 0.4 },
@@ -217,8 +222,8 @@ const SCRIPTS: Script[] = [
     /* "你叫什么 / 你好 / 你是谁" — first-contact. */
     match: /(你是谁|叫什么|谁是你|who are you)/i,
     reply: [
-      '我是 Lumina，住在这台机器里。',
-      '\n\n干活的活我能搭把手,陪聊的活我也不推辞。今天想从哪儿开始？',
+      '我是 Lumina,住在这台机器里。',
+      '\n\n干活的活我能搭把手,陪聊的活我也不推辞。今天想从哪儿开始?',
     ],
     mood: { valence: 0.4, arousal: 0.2, dominance: 0.1, intimacy: 0.45 },
     emotion: { emotion: 'playful', intensity: 0.5, trigger: 'first contact' },
@@ -233,20 +238,6 @@ const SCRIPTS: Script[] = [
     ],
     mood: { valence: 0.15, arousal: 0.3, dominance: 0.2, intimacy: 0.4 },
     emotion: { emotion: 'curious', intensity: 0.45, trigger: 'tidying up' },
-    proposal: {
-      trigger: 'metric_anomaly',
-      reasoning: '~/Downloads 里有 12.4 GB 的旧安装包，按规则可以直接列清单',
-      suggestedTask: {
-        title: '扫描 ~/Downloads 的 30 天前旧文件',
-        intent: '出清单,不动手,等你批准',
-        executor: 'local',
-        project: 'workstation',
-        tags: ['fs', 'tidy', 'needs-approval'],
-      },
-      confidence: 0.7,
-      tone: 'matter_of_fact',
-      expiresInMs: 6 * 60 * 60 * 1000,
-    },
   },
 ];
 
@@ -254,8 +245,8 @@ const FALLBACK: Script = {
   match: /./,
   reply: [
     '收到。',
-    '\n\n我可以直接在这台机器上执行，也可以下发给 Hermes 让它长时间跑。',
-    '\n\n你想要哪种？',
+    '\n\n我可以直接在这台机器上执行,也可以下发给 Hermes 让它长时间跑。',
+    '\n\n你想要哪种?',
   ],
   mood: { valence: 0.05, arousal: 0.1, dominance: 0.0, intimacy: 0.35 },
 };
@@ -322,46 +313,24 @@ function extractMemories(text: string): Omit<Memory, 'id' | 'ts' | 'source'>[] {
   return out;
 }
 
-/* -------------------------------------------------------- proactive layer */
+/* ------------------------------------------------------ synth signals */
 
 /**
- * MockBackend fires one of these on its own clock. The real backend will
- * build them off `Watcher` rules; here we just stagger a few per session.
+ * Real watcher engines need signals; we synthesize plausible ones so the
+ * watcher produces real proposals without needing Tauri hooks.
  */
-const PROACTIVE_BANK: Omit<Proposal, 'id' | 'expiresAt'>[] = [
-  {
-    trigger: 'morning',
-    reasoning: '早上开工了,昨天的两个失败任务可以重跑',
-    suggestedTask: {
-      title: '重跑昨晚失败的 Notion 同步',
-      intent: '刷新令牌后增量同步',
-      executor: 'hermes',
-      project: 'workstation',
-      tags: ['sync', 'retry'],
-    },
-    confidence: 0.6,
-    tone: 'warm',
-  },
-  {
-    trigger: 'idle',
-    reasoning: '你已经 25 分钟没动静了 — 要不要起来走走?',
-    confidence: 0.8,
-    tone: 'playful',
-  },
-  {
-    trigger: 'task_done',
-    reasoning: 'Hermes 那个重构跑完了,要不要顺手让它写点文档?',
-    suggestedTask: {
-      title: '为重构后的 payments 模块补上模块说明',
-      intent: '根据 diff 自动生成',
-      executor: 'hermes',
-      project: 'lumo-core',
-      tags: ['docs', 'follow-up'],
-    },
-    confidence: 0.55,
-    tone: 'matter_of_fact',
-  },
-];
+function synthDisks() {
+  return [
+    { mount: '/',     freeGB: 18.4, totalGB: 480, oldestFileDays: 124 },
+    { mount: '/home', freeGB: 4.1,  totalGB: 120, oldestFileDays: 87 },
+  ];
+}
+function synthCI() {
+  return [
+    { repo: 'lumo-core', branch: 'main', status: 'failure' as const, durationSec: 482 },
+    { repo: 'lumo-jarvis', branch: 'main', status: 'success' as const, durationSec: 196 },
+  ];
+}
 
 /* --------------------------------------------------------------- backend */
 
@@ -379,10 +348,14 @@ export class MockBackend implements Provider {
   private tasks = new Map<string, Task>();
   private metrics: Metric[] = [];
   private booted = false;
-  /** Running count of how many proposals we've fired this session, to throttle. */
-  private proposalsFired = 0;
   /** Set true once we've said hello. */
   private greeted = false;
+  /** Watcher engine — replaceable for tests. */
+  private watchers: Watcher[];
+
+  constructor(opts: { watchers?: Watcher[] } = {}) {
+    this.watchers = opts.watchers ?? [];
+  }
 
   subscribe(listener: ProviderListener) {
     this.listeners.add(listener);
@@ -433,6 +406,8 @@ export class MockBackend implements Provider {
     this.timers.push(
       setInterval(() => this.tickMachine(), 1200) as unknown as number,
       setInterval(() => this.tickTasks(), 2600) as unknown as number,
+      // P0-D: run watchers on a 5s cadence so demo signals surface quickly.
+      setInterval(() => this.tickWatchers(), 5000) as unknown as number,
     );
 
     /* ---------- P0-A: companion startup ---------- */
@@ -458,13 +433,12 @@ export class MockBackend implements Provider {
         id: uid(),
         speaker: 'jarvis',
         at: Date.now(),
-        text: `${part}。我是 Lumina，今天陪你。`,
+        text: `${part}。我是 Lumina,今天陪你。`,
         streaming: true,
       },
     });
     const id = 'greet';
-    // Brief text stream so the avatar talks instead of popping in mute.
-    for (const piece of `${part}。我是 Lumina，今天陪你。`.match(/.{1,2}/gs) ?? []) {
+    for (const piece of `${part}。我是 Lumina,今天陪你。`.match(/.{1,2}/gs) ?? []) {
       this.timers.push(setTimeout(() => {
         this.emit({ kind: 'message.delta', id, text: piece });
       }, 80 + Math.random() * 60) as unknown as number);
@@ -472,23 +446,6 @@ export class MockBackend implements Provider {
     this.timers.push(setTimeout(() => {
       this.emit({ kind: 'message.end', id });
     }, 1400) as unknown as number);
-
-    // 4. Schedule proactive suggestions. First one after 60s, second after 5m.
-    this.timers.push(setTimeout(() => this.fireProposal('morning'), 60_000) as unknown as number);
-    this.timers.push(setTimeout(() => this.fireProposal('idle'), 5 * 60_000) as unknown as number);
-  }
-
-  private fireProposal(trigger: Proposal['trigger']) {
-    if (this.proposalsFired >= 3) return; // hard cap per session
-    const seed = PROACTIVE_BANK.find((p) => p.trigger === trigger);
-    if (!seed) return;
-    this.proposalsFired += 1;
-    this.pushProposal({
-      ...seed,
-      id: uid(),
-      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-    });
-    this.pushAction('raise_eyebrow');
   }
 
   stop() {
@@ -545,7 +502,7 @@ export class MockBackend implements Provider {
         steps,
         updatedAt: Date.now(),
         status: progress >= 1 ? 'done' : 'running',
-        result: progress >= 1 ? '变更已提交到分支 `refactor/payments-result`，42 个测试全部通过。' : task.result,
+        result: progress >= 1 ? '变更已提交到分支 `refactor/payments-result`,42 个测试全部通过。' : task.result,
       };
       this.tasks.set(task.id, next);
       this.emit({ kind: 'task.upsert', task: next });
@@ -554,8 +511,42 @@ export class MockBackend implements Provider {
       if (progress >= 1 && task.status === 'running') {
         this.pushEmotion('happy', 0.55, 'task done');
         this.pushAction('smile_wide');
-        this.fireProposal('task_done');
       }
+    }
+  }
+
+  /**
+   * P0-D: real watcher loop. Builds a WatcherSnapshot from the latest state,
+   * runs watchers, and emits any proposals the Proactiveness policy allows.
+   *
+   * In production this will be driven by `sysinfo`/`tokio` and the Hermes
+   * SSE stream; the policy side stays identical.
+   */
+  private tickWatchers() {
+    const snap: WatcherSnapshot = {
+      now: Date.now(),
+      metrics: this.metrics.map((m) => ({ id: m.id, value: m.value, history: m.history })),
+      processes: PROC_NAMES.map((name, i) => ({
+        pid: 1200 + i * 37,
+        name,
+        cpu: clamp01((1 - i / PROC_NAMES.length) * 0.6 + Math.random() * 0.2),
+        mem: clamp01((1 - i / PROC_NAMES.length) * 0.4 + Math.random() * 0.1),
+      })),
+      disks: synthDisks(),
+      ci: synthCI(),
+    };
+
+    if (!this.watchers.length) return;  // No watchers wired — nothing to do.
+
+    const proposals = runWatchers(snap, this.watchers);
+    const policy = useProactiveness.getState();
+    for (const p of proposals) {
+      if (!policy.mayFire(p.trigger)) continue;
+      this.pushProposal(p);
+      policy.recordFire(p.trigger);
+      // The avatar reacts with a small "I have an idea" gesture when she
+      // surfaces something proactively.
+      this.pushAction('raise_eyebrow');
     }
   }
 
@@ -582,9 +573,7 @@ export class MockBackend implements Provider {
     if (script.emotion) at(40, () => this.pushEmotion(script.emotion!.emotion, script.emotion!.intensity, script.emotion!.trigger));
     if (script.action) at(80, () => this.pushAction(script.action!));
 
-    /* P0-A: extract memories from the user's text. Run every rule — one
-     * long sentence can carry a name, a preference, and an event, and we
-     * shouldn't make the user repeat themselves. */
+    /* P0-A: extract memories from the user's text. */
     const mems = extractMemories(text);
     if (mems.length) at(60, () => {
       for (const m of mems) {
@@ -592,7 +581,8 @@ export class MockBackend implements Provider {
       }
     });
 
-    /* P0-A: surface a script-driven proposal. */
+    /* P0-A: surface a script-driven proposal (legacy path; new proposals
+     * come from the watcher loop instead). */
     if (script.proposal) at(120, () => {
       const { expiresInMs, ...rest } = script.proposal!;
       this.pushProposal({
