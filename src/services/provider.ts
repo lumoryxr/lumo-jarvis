@@ -1,4 +1,7 @@
-import type { Message, Task, MachineSnapshot, ConnectorStatus } from '../core/types';
+import type {
+  Memory, Message, Mood, PersonaAction, PersonaPreset, Proposal, Task,
+  MachineSnapshot, ConnectorStatus,
+} from '../core/types';
 
 /**
  * The seam between the UI and anything that does real work.
@@ -11,6 +14,7 @@ import type { Message, Task, MachineSnapshot, ConnectorStatus } from '../core/ty
 
 /** Incremental updates pushed out of a provider while a turn is in flight. */
 export type ProviderEvent =
+  /* -- assistant core (original) ----------------------------------------- */
   | { kind: 'message.start'; message: Message }
   | { kind: 'message.delta'; id: string; text: string }
   | { kind: 'message.end'; id: string }
@@ -19,7 +23,14 @@ export type ProviderEvent =
   | { kind: 'task.upsert'; task: Task }
   | { kind: 'machine'; snapshot: MachineSnapshot }
   | { kind: 'connector'; status: ConnectorStatus }
-  | { kind: 'speech'; text: string; done: boolean };
+  | { kind: 'speech'; text: string; done: boolean }
+  /* -- companion layer (P0-A) -------------------------------------------- */
+  | { kind: 'mood'; mood: Mood }
+  | { kind: 'emotion'; emotion: import('../core/types').Emotion; intensity: number; trigger?: string }
+  | { kind: 'persona-action'; action: PersonaAction; durationMs?: number }
+  | { kind: 'memory'; memory: Memory }
+  | { kind: 'proposal'; proposal: Proposal }
+  | { kind: 'persona'; preset: PersonaPreset; name: string };
 
 export type ProviderListener = (event: ProviderEvent) => void;
 

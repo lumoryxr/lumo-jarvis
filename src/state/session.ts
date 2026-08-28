@@ -4,6 +4,7 @@ import type {
 } from '../core/types';
 import type { Provider } from '../services/provider';
 import { MockBackend } from '../services/mock';
+import { usePersona, startMemoryDecay } from './persona';
 
 /**
  * Single source of truth for the whole window.
@@ -11,6 +12,12 @@ import { MockBackend } from '../services/mock';
  * Swap the provider here to go from prototype to production:
  *   const provider: Provider = new MockBackend();
  *   const provider: Provider = new TauriProvider();   // real OS + Hermes
+ *
+ * P0-A: persona / mood / memory lives in a *separate* zustand store
+ * (`state/persona`). This keeps the assistant core (agent + tasks + machine)
+ * single-purpose and avoids accidentally coupling emotional state to work
+ * state. The two stores communicate only through `ProviderEvent`s on the
+ * wire — see the companion-layer branches at the bottom of `boot()`.
  */
 const provider: Provider = new MockBackend();
 
@@ -114,10 +121,34 @@ export const useSession = create<SessionState>((set) => ({
         case 'connector':
           set((s) => ({ connectors: { ...s.connectors, [event.status.id]: event.status } }));
           break;
+
+        /* P0-A — companion-layer events. Routed straight into the persona
+         * store. The session store stays single-purpose: agent + tasks +
+         * machine. Persona has its own lifecycle. */
+        case 'mood':
+          usePersona.getState().pushMood(event.mood);
+          break;
+        case 'emotion':
+          usePersona.getState().pushEmotion(event.emotion, event.intensity, event.trigger);
+          break;
+        case 'persona-action':
+          usePersona.getState().pushAction(event.action);
+          break;
+        case 'memory':
+          usePersona.getState().addMemory(event.memory);
+          break;
+        case 'proposal':
+          usePersona.getState().pushProposal(event.proposal);
+          break;
+        case 'persona':
+          usePersona.getState().setPersona(event.preset, event.name);
+          break;
       }
     });
 
     void provider.start().then(() => set({ agentState: 'idle' }));
+    // Memories decay slowly in the background. No-op if no memories exist.
+    startMemoryDecay();
   },
 
   send: (text) => {

@@ -1,14 +1,24 @@
 import type { Provider, ProviderEvent, ProviderListener } from './provider';
-import type { Task, TaskStatus, MachineSnapshot, Metric, ToolCall } from '../core/types';
+import type {
+  Emotion, Memory, Mood, PersonaAction, PersonaPreset, Proposal, Task, TaskStatus,
+  MachineSnapshot, Metric, ToolCall,
+} from '../core/types';
 
 /**
  * The prototype's stand-in for a real backend.
  *
- * It fabricates a plausible machine, a Hermes-shaped task pipeline and a
- * scripted conversation so the whole surface can be exercised without a
- * gateway, a webview bridge or an API key. Every event it emits is one the real
- * providers also emit — swapping `MockBackend` for `HermesProvider` is a
- * one-line change in `src/state/session.ts`.
+ * Two responsibilities stacked:
+ *   1. The original assistant core — fabricates a plausible machine, a
+ *      Hermes-shaped task pipeline and a scripted conversation so the
+ *      assistant surface can be exercised without a gateway.
+ *   2. The P0-A companion layer — opens the session by introducing herself,
+ *      greets the user with a `mood` + `emotion`, listens for memory-shaped
+ *      facts in user input, plays scripted emotions/actions in response,
+ *      and fires proactive proposals at sensible intervals.
+ *
+ * Every event it emits is one the real providers also emit — swapping
+ * `MockBackend` for `HermesProvider` is a one-line change in
+ * `src/state/session.ts`.
  */
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -103,14 +113,29 @@ function buildTask(seed: (typeof TASK_SEEDS)[number], now: number): Task {
 
 /* -------------------------------------------------------- scripted turns */
 
+/**
+ * A script is a *response shape* to a user message. P0-A adds three optional
+ * layers beyond the original reply/tools/task:
+ *   mood  — her baseline mood shifts during this turn
+ *   emotion — the discrete emotion label she'll show for a moment
+ *   action — a small bodily expression (laugh, sigh, etc.)
+ *   memory — anything to remember from the user's message
+ *   proposal — a proactive suggestion she'd like to bubble up
+ */
 interface Script {
   match: RegExp;
   reply: string[];
   tools?: { name: string; summary: string; output: string }[];
   task?: { title: string; intent: string; executor: Task['executor']; project: string; tags: string[] };
+  mood?: Mood;
+  emotion?: { emotion: Emotion; intensity: number; trigger?: string };
+  action?: PersonaAction;
+  memory?: Omit<Memory, 'id' | 'ts' | 'source'> & { source?: Memory['source'] };
+  proposal?: Omit<Proposal, 'id' | 'expiresAt'> & { expiresInMs?: number };
 }
 
 const SCRIPTS: Script[] = [
+  /* ---- the assistant's original repertoire ----------------------------- */
   {
     match: /(内存|memory|cpu|性能|卡)/i,
     reply: [
@@ -122,6 +147,8 @@ const SCRIPTS: Script[] = [
       { name: 'os.processes', summary: 'ps aux --sort=-%mem | head -20', output: 'node 6.2G · rustc 1.8G · chrome 1.1G' },
       { name: 'os.inspect', summary: 'pgrep -P 1 node', output: '2 orphaned node processes' },
     ],
+    mood: { valence: -0.05, arousal: 0.25, dominance: 0.2, intimacy: 0.4 },
+    emotion: { emotion: 'concerned', intensity: 0.5, trigger: 'high memory pressure' },
   },
   {
     match: /(写|开发|实现|重构|代码|code|refactor|implement)/i,
@@ -138,6 +165,8 @@ const SCRIPTS: Script[] = [
       project: 'lumo-core',
       tags: ['hermes', 'coding'],
     },
+    mood: { valence: 0.2, arousal: 0.35, dominance: 0.25, intimacy: 0.4 },
+    emotion: { emotion: 'curious', intensity: 0.5, trigger: 'new coding work' },
   },
   {
     match: /(任务|进度|状态|汇总|task|status|summary)/i,
@@ -146,16 +175,201 @@ const SCRIPTS: Script[] = [
       '\n\n需要你介入的是「清理 Downloads」——它列好了 41 个文件共 12.4 GB，等确认；',
       '还有 Notion 同步的令牌过期了。',
     ],
+    mood: { valence: 0.0, arousal: 0.1, dominance: 0.15, intimacy: 0.4 },
+  },
+  /* ---- the companion layer's repertoire -------------------------------- */
+  {
+    /* "我喜欢你 / 在吗" — she lights up. */
+    match: /(喜欢|想你|在吗|陪|陪我|你好)/i,
+    reply: [
+      '在呢。',
+      '\n\n今天感觉怎么样？是要干活，还是就聊会儿？',
+    ],
+    mood: { valence: 0.55, arousal: 0.45, dominance: 0.0, intimacy: 0.55 },
+    emotion: { emotion: 'playful', intensity: 0.7, trigger: 'user reaching out' },
+    action: 'smile_wide',
+  },
+  {
+    /* "我累了 / 烦 / 压力大" — soften, don't fix. */
+    match: /(累|烦|压力|心情不好|郁闷|焦虑|难过)/i,
+    reply: [
+      '嗯，听到了。',
+      '\n\n要不要先去倒杯水？我把 Hermes 那边的非关键任务先暂停一会儿，你回来再说。',
+    ],
+    mood: { valence: -0.15, arousal: -0.35, dominance: -0.2, intimacy: 0.6 },
+    emotion: { emotion: 'tender', intensity: 0.7, trigger: 'user is tired' },
+    action: 'tilt_head',
+  },
+  {
+    /* "帮我看看 Notion / 同步" — task-shaped, but with empathy in the voice. */
+    match: /(notion|同步|令牌|过期)/i,
+    reply: [
+      '我看了一下 Notion 集成，',
+      '令牌 9 月 12 日到期，刷新密钥的入口在 ',
+      '`lumo-core/integrations/notion.toml`。',
+      '\n\n要不要我现在帮你切到新密钥，并把上次失败的那次同步重跑一次？',
+    ],
+    tools: [{ name: 'os.inspect', summary: 'cat integrations/notion.toml', output: 'token = "expired 2024-09-12"' }],
+    mood: { valence: 0.1, arousal: 0.15, dominance: 0.25, intimacy: 0.4 },
+    emotion: { emotion: 'concerned', intensity: 0.45, trigger: 'integration failing' },
+  },
+  {
+    /* "你叫什么 / 你好 / 你是谁" — first-contact. */
+    match: /(你是谁|叫什么|谁是你|who are you)/i,
+    reply: [
+      '我是 Lumina，住在这台机器里。',
+      '\n\n干活的活我能搭把手,陪聊的活我也不推辞。今天想从哪儿开始？',
+    ],
+    mood: { valence: 0.4, arousal: 0.2, dominance: 0.1, intimacy: 0.45 },
+    emotion: { emotion: 'playful', intensity: 0.5, trigger: 'first contact' },
+    action: 'raise_eyebrow',
+  },
+  {
+    /* "清一下磁盘 / 整理 / 优化" — proactive territory. */
+    match: /(清|整理|优化|磁盘|空间|优化)/i,
+    reply: [
+      '行,我先列个清单,你看一下再拍板。',
+      '\n\n按风险排好序——最容易撤销的先来。',
+    ],
+    mood: { valence: 0.15, arousal: 0.3, dominance: 0.2, intimacy: 0.4 },
+    emotion: { emotion: 'curious', intensity: 0.45, trigger: 'tidying up' },
+    proposal: {
+      trigger: 'metric_anomaly',
+      reasoning: '~/Downloads 里有 12.4 GB 的旧安装包，按规则可以直接列清单',
+      suggestedTask: {
+        title: '扫描 ~/Downloads 的 30 天前旧文件',
+        intent: '出清单,不动手,等你批准',
+        executor: 'local',
+        project: 'workstation',
+        tags: ['fs', 'tidy', 'needs-approval'],
+      },
+      confidence: 0.7,
+      tone: 'matter_of_fact',
+      expiresInMs: 6 * 60 * 60 * 1000,
+    },
   },
 ];
 
-const FALLBACK: string[] = [
-  '收到。',
-  '我可以直接在这台机器上执行，也可以下发给 Hermes 让它长时间跑。',
-  '\n\n你想要哪种？',
+const FALLBACK: Script = {
+  match: /./,
+  reply: [
+    '收到。',
+    '\n\n我可以直接在这台机器上执行，也可以下发给 Hermes 让它长时间跑。',
+    '\n\n你想要哪种？',
+  ],
+  mood: { valence: 0.05, arousal: 0.1, dominance: 0.0, intimacy: 0.35 },
+};
+
+/* ----------------------------------------------------- memory extraction */
+
+/**
+ * Trivial regex sweep — the real impl will use the LLM. Each rule appends
+ * a candidate; the caller decides what to do with them.
+ *
+ * Patterns:
+ *   1. "my name is X" / "I'm X" / "我叫 X"
+ *   2. "I like / hate / prefer X" / "我喜欢 / 讨厌 X"
+ *   3. "I'm working on X" / "我正在做 X"
+ *   4. "tomorrow I'll X" / "明天要 X"   → event, future-dated
+ *   5. "I'm tired / sad / stressed" / "我累了 / 心情糟"   → emotion
+ *   6. "my goal is X" / "我的目标 X"
+ *
+ * One user sentence can carry several memories — we return all of them.
+ */
+function extractMemories(text: string): Omit<Memory, 'id' | 'ts' | 'source'>[] {
+  const t = text.trim();
+  if (!t || t.length > 200) return [];
+  const out: Omit<Memory, 'id' | 'ts' | 'source'>[] = [];
+  const push = (m: Omit<Memory, 'id' | 'ts' | 'source'>) => out.push(m);
+
+  /* 1. name */
+  const name = t.match(/(?:我叫|我是|I'm|I am)\s*([一-龥A-Za-z][一-龥A-Za-z0-9_-]{0,15})/);
+  if (name) push({ kind: 'fact', content: `名字是 ${name[1]}`, confidence: 0.95 });
+
+  /* 2. preference (negative first — "I don't like X" before "I like Y") */
+  const dislikes = [...t.matchAll(/(?:我)?(不喜欢|讨厌|不爱|don't like|hate)\s*([一-龥\w][一-龥\w\s]{0,30}?)(?:[。.!！,]|$)/gi)];
+  for (const m of dislikes) push({ kind: 'preference', content: `不喜欢${m[2].trim()}`, confidence: 0.8 });
+  const likes = [...t.matchAll(/(?:我)?(喜欢|爱|prefer|love)\s*([一-龥\w][一-龥\w\s]{0,30}?)(?:[。.!！,]|$)/gi)];
+  for (const m of likes) {
+    if (!/(喜欢|想|要)\s*(你|她|他|聊天|陪伴|陪)/.test(m[0])) {
+      push({ kind: 'preference', content: `喜欢${m[2].trim()}`, confidence: 0.75 });
+    }
+  }
+
+  /* 3. ongoing project / fact */
+  const work = t.match(/(?:我在|正在|我目前|做的是|做的是项目)\s*([一-龥\w][一-龥\w\s]{1,30}?)(?:[。.!！,]|$)/);
+  if (work) push({ kind: 'fact', content: `最近在弄:${work[1].trim()}`, confidence: 0.6 });
+  const work2 = t.match(/(?:弄|写|搞|做)\s*([一-龥\w][一-龥\w\s]{1,30}?)(?:[。.!！,]|$)/);
+  if (work2 && work2[1].length >= 2) push({ kind: 'fact', content: `最近在弄:${work2[1].trim()}`, confidence: 0.55 });
+
+  /* 4. future event */
+  const future = t.match(/(?:明天|下周|今晚|周一|周二|周三|周四|周五|tomorrow)\s*(?:要|得|会|将|我)?\s*([一-龥\w][一-龥\w\s]{1,30}?)(?:[。.!！,]|$)/);
+  if (future) push({ kind: 'event', content: `日程:${future[1].trim()}`, confidence: 0.65 });
+
+  /* 5. emotional state */
+  if (/(我今天|现在|感觉|觉得|心情)?(累|烦|压力|糟|难过|焦虑|郁闷|疲惫|down|stressed|tired)/.test(t)) {
+    push({
+      kind: 'emotion',
+      content: `今天感觉${/(糟|难过|烦|压力|down)/.test(t) ? '不好' : '有点累'}`,
+      confidence: 0.6,
+    });
+  }
+
+  /* 6. goal */
+  const goal = t.match(/(?:我打算|目标是|想做到|我的目标)\s*([一-龥\w][一-龥\w\s]{1,30}?)(?:[。.!！,]|$)/);
+  if (goal) push({ kind: 'goal', content: `目标:${goal[1].trim()}`, confidence: 0.65 });
+
+  return out;
+}
+
+/* -------------------------------------------------------- proactive layer */
+
+/**
+ * MockBackend fires one of these on its own clock. The real backend will
+ * build them off `Watcher` rules; here we just stagger a few per session.
+ */
+const PROACTIVE_BANK: Omit<Proposal, 'id' | 'expiresAt'>[] = [
+  {
+    trigger: 'morning',
+    reasoning: '早上开工了,昨天的两个失败任务可以重跑',
+    suggestedTask: {
+      title: '重跑昨晚失败的 Notion 同步',
+      intent: '刷新令牌后增量同步',
+      executor: 'hermes',
+      project: 'workstation',
+      tags: ['sync', 'retry'],
+    },
+    confidence: 0.6,
+    tone: 'warm',
+  },
+  {
+    trigger: 'idle',
+    reasoning: '你已经 25 分钟没动静了 — 要不要起来走走?',
+    confidence: 0.8,
+    tone: 'playful',
+  },
+  {
+    trigger: 'task_done',
+    reasoning: 'Hermes 那个重构跑完了,要不要顺手让它写点文档?',
+    suggestedTask: {
+      title: '为重构后的 payments 模块补上模块说明',
+      intent: '根据 diff 自动生成',
+      executor: 'hermes',
+      project: 'lumo-core',
+      tags: ['docs', 'follow-up'],
+    },
+    confidence: 0.55,
+    tone: 'matter_of_fact',
+  },
 ];
 
 /* --------------------------------------------------------------- backend */
+
+const PRESET: PersonaPreset = 'teasing_flirty';
+const NAME = 'Lumina';
+
+/** Baseline mood she'd return to when nothing's happening. */
+const BASELINE_MOOD: Mood = { valence: 0.35, arousal: 0.1, dominance: 0.05, intimacy: 0.45 };
 
 export class MockBackend implements Provider {
   readonly id = 'mock';
@@ -165,6 +379,10 @@ export class MockBackend implements Provider {
   private tasks = new Map<string, Task>();
   private metrics: Metric[] = [];
   private booted = false;
+  /** Running count of how many proposals we've fired this session, to throttle. */
+  private proposalsFired = 0;
+  /** Set true once we've said hello. */
+  private greeted = false;
 
   subscribe(listener: ProviderListener) {
     this.listeners.add(listener);
@@ -174,6 +392,15 @@ export class MockBackend implements Provider {
   private emit(event: ProviderEvent) {
     for (const l of this.listeners) l(event);
   }
+
+  /** Helper to push companion-layer events without spelling out `kind` each time. */
+  private pushMood(mood: Mood) { this.emit({ kind: 'mood', mood }); }
+  private pushEmotion(emotion: Emotion, intensity: number, trigger?: string) {
+    this.emit({ kind: 'emotion', emotion, intensity, trigger });
+  }
+  private pushAction(action: PersonaAction) { this.emit({ kind: 'persona-action', action }); }
+  private pushMemory(memory: Memory) { this.emit({ kind: 'memory', memory }); }
+  private pushProposal(proposal: Proposal) { this.emit({ kind: 'proposal', proposal }); }
 
   async start() {
     if (this.booted) return;
@@ -207,10 +434,65 @@ export class MockBackend implements Provider {
       setInterval(() => this.tickMachine(), 1200) as unknown as number,
       setInterval(() => this.tickTasks(), 2600) as unknown as number,
     );
+
+    /* ---------- P0-A: companion startup ---------- */
+    // 1. Announce the persona (the UI's name + greeting reference).
+    this.emit({ kind: 'persona', preset: PRESET, name: NAME });
+    // 2. Push the baseline mood so the avatar has a colour, not pure black.
+    this.pushMood(BASELINE_MOOD);
+    // 3. Greet the user after a short delay so it doesn't fight the boot flow.
+    this.timers.push(setTimeout(() => this.greet(), 900) as unknown as number);
+  }
+
+  /** First-contact greeting — distinct from the boot message in the transcript. */
+  private greet() {
+    if (this.greeted) return;
+    this.greeted = true;
+    const hour = new Date().getHours();
+    const part = hour < 5 ? '凌晨好' : hour < 11 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
+    this.pushEmotion('playful', 0.6, 'first contact');
+    this.pushAction('smile_wide');
+    this.emit({
+      kind: 'message.start',
+      message: {
+        id: uid(),
+        speaker: 'jarvis',
+        at: Date.now(),
+        text: `${part}。我是 Lumina，今天陪你。`,
+        streaming: true,
+      },
+    });
+    const id = 'greet';
+    // Brief text stream so the avatar talks instead of popping in mute.
+    for (const piece of `${part}。我是 Lumina，今天陪你。`.match(/.{1,2}/gs) ?? []) {
+      this.timers.push(setTimeout(() => {
+        this.emit({ kind: 'message.delta', id, text: piece });
+      }, 80 + Math.random() * 60) as unknown as number);
+    }
+    this.timers.push(setTimeout(() => {
+      this.emit({ kind: 'message.end', id });
+    }, 1400) as unknown as number);
+
+    // 4. Schedule proactive suggestions. First one after 60s, second after 5m.
+    this.timers.push(setTimeout(() => this.fireProposal('morning'), 60_000) as unknown as number);
+    this.timers.push(setTimeout(() => this.fireProposal('idle'), 5 * 60_000) as unknown as number);
+  }
+
+  private fireProposal(trigger: Proposal['trigger']) {
+    if (this.proposalsFired >= 3) return; // hard cap per session
+    const seed = PROACTIVE_BANK.find((p) => p.trigger === trigger);
+    if (!seed) return;
+    this.proposalsFired += 1;
+    this.pushProposal({
+      ...seed,
+      id: uid(),
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+    });
+    this.pushAction('raise_eyebrow');
   }
 
   stop() {
-    for (const t of this.timers) clearInterval(t);
+    for (const t of this.timers) clearTimeout(t);
     this.timers = [];
     this.listeners.clear();
     this.booted = false;
@@ -267,13 +549,20 @@ export class MockBackend implements Provider {
       };
       this.tasks.set(task.id, next);
       this.emit({ kind: 'task.upsert', task: next });
+
+      // P0-A: when a task finishes, light up briefly and suggest a follow-up.
+      if (progress >= 1 && task.status === 'running') {
+        this.pushEmotion('happy', 0.55, 'task done');
+        this.pushAction('smile_wide');
+        this.fireProposal('task_done');
+      }
     }
   }
 
   /* --------------------------------------------------------------- turn */
 
   async send(text: string) {
-    const script = SCRIPTS.find((s) => s.match.test(text)) ?? { match: /./, reply: FALLBACK };
+    const script = SCRIPTS.find((s) => s.match.test(text)) ?? FALLBACK;
     const messageId = uid();
 
     this.emit({
@@ -285,6 +574,33 @@ export class MockBackend implements Provider {
     const at = (ms: number, fn: () => void) => {
       this.timers.push(setTimeout(fn, ms) as unknown as number);
     };
+
+    /* P0-A: push mood/emotion/action/memory/proposal before the turn begins
+     * so the avatar has already settled into the right colour by the time
+     * the first delta arrives. */
+    if (script.mood) at(0, () => this.pushMood(script.mood!));
+    if (script.emotion) at(40, () => this.pushEmotion(script.emotion!.emotion, script.emotion!.intensity, script.emotion!.trigger));
+    if (script.action) at(80, () => this.pushAction(script.action!));
+
+    /* P0-A: extract memories from the user's text. Run every rule — one
+     * long sentence can carry a name, a preference, and an event, and we
+     * shouldn't make the user repeat themselves. */
+    const mems = extractMemories(text);
+    if (mems.length) at(60, () => {
+      for (const m of mems) {
+        this.pushMemory({ ...m, id: uid(), ts: Date.now(), source: 'told' });
+      }
+    });
+
+    /* P0-A: surface a script-driven proposal. */
+    if (script.proposal) at(120, () => {
+      const { expiresInMs, ...rest } = script.proposal!;
+      this.pushProposal({
+        ...rest,
+        id: uid(),
+        expiresAt: Date.now() + (expiresInMs ?? 24 * 60 * 60 * 1000),
+      });
+    });
 
     for (const tool of script.tools ?? []) {
       const call: ToolCall = { id: uid(), name: tool.name, summary: tool.summary, status: 'running' };
@@ -332,6 +648,8 @@ export class MockBackend implements Provider {
     at(delay + 120, () => {
       this.emit({ kind: 'message.end', id: messageId });
       this.emit({ kind: 'speech', text: script.reply.join(''), done: true });
+      /* P0-A: drift mood back toward baseline after the turn, like exhaling. */
+      this.pushMood(BASELINE_MOOD);
     });
   }
 
@@ -341,6 +659,8 @@ export class MockBackend implements Provider {
     const next: Task = { ...task, status: 'cancelled', updatedAt: Date.now(), result: '已按你的指令中止。' };
     this.tasks.set(taskId, next);
     this.emit({ kind: 'task.upsert', task: next });
+    /* P0-A: tiny pout when she cancels something. */
+    this.pushEmotion('sad', 0.25, 'cancelled by user');
   }
 
   async retryTask(taskId: string) {
@@ -356,5 +676,8 @@ export class MockBackend implements Provider {
     };
     this.tasks.set(taskId, next);
     this.emit({ kind: 'task.upsert', task: next });
+    /* P0-A: optimistic little face. */
+    this.pushEmotion('curious', 0.4, 'retry');
+    this.pushAction('raise_eyebrow');
   }
 }

@@ -49,10 +49,62 @@
 .topbar__stat-v--state { color: var(--cyan); text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em; }
 .topbar__stat.is-hot .topbar__stat-v { color: var(--gold); text-shadow: 0 0 12px var(--gold); }
 
-/* --- clock ---------------------------------------------------------------- */
+/* --- right side: window mode + clock ------------------------------------ */
+
+.topbar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.topbar__mode {
+  display: flex;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 1px;
+  background: rgba(4, 10, 18, 0.4);
+}
+.topbar__mode-btn {
+  padding: 3px 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  color: var(--ink-faint);
+}
+.topbar__mode-btn .label {
+  font-size: 9px;
+  letter-spacing: 0.20em;
+  color: inherit;
+}
+.topbar__mode-btn:hover { color: var(--ink-dim); }
+.topbar__mode-btn.is-on {
+  background: rgba(53, 232, 255, 0.12);
+  color: var(--cyan);
+  box-shadow: inset 0 0 0 1px var(--hairline-bright);
+}
+.topbar__mode-btn.is-on .label { color: var(--cyan); text-shadow: 0 0 10px rgba(53, 232, 255, 0.4); }
+
+.topbar__cycle {
+  display: grid; place-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink-dim);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.topbar__cycle:hover {
+  background: rgba(120, 220, 255, 0.08);
+  color: var(--cyan-soft);
+}
+.topbar__cycle .label { font-size: 9px; letter-spacing: 0.16em; }
 
 .topbar__clock {
-  margin-left: auto;
   display: flex;
   align-items: baseline;
   gap: 10px;

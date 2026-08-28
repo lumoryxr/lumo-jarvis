@@ -144,3 +144,66 @@
   background: var(--cyan);
   animation: pulse 900ms steps(2) infinite;
 }
+
+/* --- P0-A: persona readouts (mood / emotion / action) ------------------- *
+ * These are *hints*, not the message. Tiny in the corner, low opacity, so
+ * the avatar stays primary. The keys on the emotion/action divs cause them
+ * to re-mount and replay their entry animation when the value changes. */
+
+.stage__emotion {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: rgba(4, 10, 18, 0.55);
+  backdrop-filter: blur(10px);
+  opacity: 0.78;
+  animation: emotion-in 380ms var(--ease);
+}
+.stage__emotion-glyph {
+  font-size: 14px;
+  line-height: 1;
+  color: var(--cyan-soft);
+  text-shadow: 0 0 8px rgba(126, 242, 255, 0.4);
+}
+.stage__emotion-label {
+  color: var(--ink-dim);
+  letter-spacing: 0.16em;
+}
+
+.stage__action {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 3px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: rgba(4, 10, 18, 0.45);
+  backdrop-filter: blur(8px);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: action-pulse 1200ms var(--ease) forwards;
+}
+
+@keyframes emotion-in {
+  from { opacity: 0; transform: translate(-50%, -6px); }
+  to   { opacity: 0.78; transform: translate(-50%, 0); }
+}
+@keyframes action-pulse {
+  0%   { opacity: 0; transform: translate(-50%, -2px) scale(0.94); }
+  18%  { opacity: 0.85; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -8px) scale(1); }
+}

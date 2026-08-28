@@ -135,3 +135,101 @@ export interface Briefing {
   /** Narrative bullets summarising the session. */
   highlights: string[];
 }
+
+/* -------------------------------------------------------------- companion */
+
+/**
+ * Companion-product extensions layered on top of the assistant core.
+ *
+ * These are intentionally separate from the agent/task machine so the original
+ * IA keeps its clean responsibilities: persona / mood / memory live here, work
+ * lives in `Task` / `Message`. The two communicate through `ProviderEvent`s
+ * (`mood`, `emotion`, `proposal`, `persona-action`) — never by reaching into
+ * each other directly.
+ */
+
+/** Plutchik's 8 primary emotions + a few companion-product specifics. */
+export type Emotion =
+  | 'neutral'
+  | 'happy'
+  | 'sad'
+  | 'angry'
+  | 'surprised'
+  | 'disgusted'
+  | 'fearful'
+  | 'tender'
+  | 'playful'
+  | 'curious'
+  | 'concerned';
+
+/** Russell's circumplex — independent axes the avatar paints onto. */
+export interface Mood {
+  /** -1 (down) .. 1 (up) */
+  valence: number;
+  /** -1 (calm) .. 1 (energised) */
+  arousal: number;
+  /** -1 (yielding) .. 1 (in charge) */
+  dominance: number;
+  /** 0 (stranger) .. 1 (close). Long-term, decays very slowly. */
+  intimacy: number;
+}
+
+/** Persona presets the user picks during onboarding. */
+export type PersonaPreset =
+  | 'warm_curious'        /* default — warm + curious */
+  | 'playful_witty'        /* playful + witty */
+  | 'gentle_caring'        /* gentle + caring */
+  | 'cool_professional'   /* cool + professional */
+  | 'energetic_cheerful'   /* energetic + cheerful */
+  | 'calm_introspective'   /* calm + introspective */
+  | 'teasing_flirty'       /* teasing + flirty  — companion route default */
+  | 'mature_warm';         /* mature + warm */
+
+/** Persistent memory about the user. Decays in `confidence` over time. */
+export interface Memory {
+  id: string;
+  ts: number;
+  kind: 'fact' | 'preference' | 'event' | 'emotion' | 'goal';
+  content: string;
+  /** 0..1 — drops over time unless re-confirmed. <0.3 dropped from prompt. */
+  confidence: number;
+  source: 'told' | 'inferred' | 'observed';
+  relatedTo?: string[];
+}
+
+/** Small bodily expressions — used until M2 swaps in real viseme control. */
+export type PersonaAction =
+  | 'sigh'
+  | 'laugh'
+  | 'yawn'
+  | 'stretch'
+  | 'tilt_head'
+  | 'raise_eyebrow'
+  | 'pout'
+  | 'smile_wide'
+  | 'look_away'
+  | 'blink_slow';
+
+/** A proactive suggestion she wants to bring to the user's attention. */
+export interface Proposal {
+  id: string;
+  /** Where it came from — so the user can audit the trigger. */
+  trigger: 'morning' | 'idle' | 'task_done' | 'review_due' | 'metric_anomaly'
+         | 'inspiration' | 'anniversary' | 'playful';
+  reasoning: string;
+  /** The task she would start if approved. */
+  suggestedTask?: TaskDraft;
+  confidence: number;
+  /** ms-since-epoch — proposals expire so they don't pile up. */
+  expiresAt: number;
+  /** Optional tone — affects how she presents it. */
+  tone?: 'matter_of_fact' | 'warm' | 'playful' | 'concerned';
+}
+
+export interface TaskDraft {
+  title: string;
+  intent: string;
+  executor: Task['executor'];
+  project?: string;
+  tags: string[];
+}
