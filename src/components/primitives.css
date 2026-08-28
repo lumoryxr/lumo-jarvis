@@ -1,0 +1,101 @@
+/* --- panel head --------------------------------------------------------- */
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 8px;
+}
+.panel-head__rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--hairline), transparent);
+}
+
+/* --- sparkline ---------------------------------------------------------- */
+
+.spark { width: 100%; height: 26px; display: block; }
+.spark--nominal  { color: var(--cyan); }
+.spark--warn     { color: var(--gold); }
+.spark--critical { color: var(--magenta); }
+
+/* --- gauge -------------------------------------------------------------- */
+
+.gauge { position: relative; width: 64px; height: 64px; flex: none; }
+.gauge__dial { width: 100%; height: 100%; transform: rotate(135deg); }
+.gauge__track,
+.gauge__fill {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.gauge__track { stroke: rgba(120, 200, 255, 0.1); stroke-dasharray: 122.5 163.4; }
+.gauge__fill {
+  stroke: var(--cyan);
+  transition: stroke-dashoffset var(--slow) var(--ease), stroke var(--slow) var(--ease);
+  filter: drop-shadow(0 0 5px currentColor);
+}
+.gauge--warn     .gauge__fill { stroke: var(--gold); }
+.gauge--critical .gauge__fill { stroke: var(--magenta); }
+
+.gauge__readout {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+.gauge__value { font-size: 12px; font-weight: 600; color: var(--ink); }
+.gauge__readout .label { font-size: 7px; letter-spacing: 0.12em; }
+
+/* --- chip --------------------------------------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--chip) 34%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--chip) 11%, transparent);
+  color: var(--chip);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.chip__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+}
+
+/* --- progress ----------------------------------------------------------- */
+
+.progress {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(120, 200, 255, 0.09);
+  overflow: hidden;
+}
+.progress__fill {
+  position: relative;
+  height: 100%;
+  background: var(--bar);
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--bar);
+  transition: width var(--slow) var(--ease);
+  overflow: hidden;
+}
+.progress__sheen {
+  position: absolute;
+  inset: 0;
+  width: 32%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  animation: sweep 1.9s var(--ease) infinite;
+}

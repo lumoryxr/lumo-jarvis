@@ -1,0 +1,60 @@
+.topbar {
+  flex: none;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--hairline);
+  background: rgba(4, 9, 16, 0.72);
+  backdrop-filter: blur(20px);
+  user-select: none;
+}
+
+/* --- brand ---------------------------------------------------------------- */
+
+.topbar__brand { display: flex; align-items: center; gap: 8px; }
+
+.topbar__mark {
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--cyan);
+  border-radius: 3px;
+  transform: rotate(45deg);
+  box-shadow: 0 0 12px rgba(53, 232, 255, 0.55), inset 0 0 6px rgba(53, 232, 255, 0.4);
+}
+
+.topbar__name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: var(--ink);
+}
+.topbar__sep { color: var(--ink-faint); }
+.topbar__product {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: var(--cyan);
+  text-shadow: 0 0 16px rgba(53, 232, 255, 0.5);
+}
+
+/* --- stats ---------------------------------------------------------------- */
+
+.topbar__stats { display: flex; gap: 22px; margin-left: 12px; }
+.topbar__stat { display: flex; align-items: baseline; gap: 7px; }
+.topbar__stat-v { font-size: 13px; font-weight: 600; color: var(--ink); }
+.topbar__stat-v--state { color: var(--cyan); text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em; }
+.topbar__stat.is-hot .topbar__stat-v { color: var(--gold); text-shadow: 0 0 12px var(--gold); }
+
+/* --- clock ---------------------------------------------------------------- */
+
+.topbar__clock {
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.topbar__time { font-size: 14px; letter-spacing: 0.06em; color: var(--ink); }

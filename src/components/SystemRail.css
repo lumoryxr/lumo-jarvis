@@ -1,0 +1,103 @@
+.rail {
+  width: 264px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-height: 0;
+}
+
+.rail__panel { display: flex; flex-direction: column; }
+.rail__panel--grow { flex: 1; min-height: 0; }
+
+/* --- host ---------------------------------------------------------------- */
+
+.rail__host { padding: 0 14px 12px; }
+.rail__host-name { font-size: 14px; color: var(--ink); letter-spacing: 0.02em; }
+.rail__host-os { font-size: 11.5px; color: var(--ink-dim); margin-top: 2px; }
+.rail__host-up { margin-top: 6px; }
+
+.rail__gauges {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  padding: 4px 14px 14px;
+}
+
+.rail__metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+.rail__metric-head { display: flex; justify-content: space-between; align-items: baseline; }
+.rail__metric-value { font-size: 11px; color: var(--cyan); }
+.rail__metric-value--warn { color: var(--gold); }
+.rail__metric-value--critical { color: var(--magenta); }
+
+/* --- links ---------------------------------------------------------------- */
+
+.rail__links { list-style: none; margin: 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+
+.rail__link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  opacity: 0.5;
+}
+.rail__link.is-on { opacity: 1; }
+
+.rail__link-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  flex: none;
+}
+.rail__link.is-on .rail__link-dot {
+  background: var(--lime);
+  box-shadow: 0 0 8px var(--lime);
+}
+
+.rail__link-name { color: var(--ink); letter-spacing: 0.1em; flex: none; }
+.rail__link-detail {
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.rail__link-ms { color: var(--cyan-deep); flex: none; }
+
+/* --- processes ------------------------------------------------------------ */
+
+.rail__procs {
+  list-style: none;
+  margin: 0;
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow-y: auto;
+}
+.rail__proc {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  padding: 3px 0;
+}
+/* The bar sits behind the text as a translucent fill, not beside it. */
+.rail__proc-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, rgba(53, 232, 255, 0.16), rgba(53, 232, 255, 0.02));
+  border-left: 1px solid rgba(53, 232, 255, 0.35);
+  border-radius: 1px;
+  transition: width var(--slow) var(--ease);
+}
+.rail__proc-name { position: relative; color: var(--ink-dim); padding-left: 6px; }
+.rail__proc-cpu { position: relative; margin-left: auto; color: var(--cyan); }

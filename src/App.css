@@ -1,0 +1,78 @@
+.app {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--void);
+}
+
+/* --- ambient background --------------------------------------------------- */
+
+.app__bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+
+.app__vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -10%, rgba(20, 66, 96, 0.34), transparent 60%),
+    radial-gradient(ellipse 70% 60% at 12% 100%, rgba(24, 46, 70, 0.30), transparent 65%),
+    radial-gradient(ellipse 70% 60% at 88% 100%, rgba(53, 100, 130, 0.18), transparent 65%);
+}
+
+/* A single slow scanline. One is atmosphere; a full CRT overlay is noise. */
+.app__scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 160px;
+  background: linear-gradient(180deg, transparent, rgba(53, 232, 255, 0.028), transparent);
+  animation: scan 9s linear infinite;
+}
+@keyframes scan {
+  from { transform: translateY(-160px); }
+  to   { transform: translateY(100vh); }
+}
+
+/* --- layout ---------------------------------------------------------------- */
+
+.app__body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: var(--gap);
+  padding: var(--gap);
+}
+
+.app__center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* The avatar stage owns roughly the top half; the transcript takes the rest. */
+.app__center > .stage { flex: 1 1 52%; min-height: 220px; }
+.app__center > .convo { flex: 1 1 48%; }
+
+.app__divider {
+  flex: none;
+  height: 1px;
+  margin: 0 16px;
+  background: linear-gradient(90deg, transparent, var(--hairline) 20%, var(--hairline) 80%, transparent);
+}
+
+/* --- responsive ------------------------------------------------------------ */
+
+@media (max-width: 1280px) {
+  .rail { width: 224px; }
+  .board { width: 296px; }
+}
+
+@media (max-width: 1040px) {
+  .app__body { flex-direction: column; overflow-y: auto; }
+  .rail, .board { width: 100%; }
+  .app__center { min-height: 520px; }
+}
