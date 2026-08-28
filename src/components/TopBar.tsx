@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from '../state/session';
 import { useWindowMode } from '../state/windowMode';
+import { openOnboardingAt, useIsOnboarded } from './OnboardingWizard';
 import './TopBar.css';
 
 /**
@@ -8,11 +9,9 @@ import './TopBar.css';
  * a frameless window, which is why it carries no interactive controls on the
  * left half.
  *
- * P0-B: right side hosts a small mode pill — full / widget / minimized —
- * so the user always knows where Lumina is and can hop back without the
- * global hotkey.
- *
- * P0-C: a `⌘.` button opens the Memory Console (the trust surface).
+ * P0-B: right side hosts a small mode pill — full / widget / minimized.
+ * P0-C: `⌘.` opens the Memory Console (trust surface).
+ * P0-E: `⌘,` and the `·` button reopen the onboarding wizard (reconfigure).
  */
 export function TopBar() {
   const [now, setNow] = useState(() => new Date());
@@ -22,6 +21,7 @@ export function TopBar() {
   const mode = useWindowMode((s) => s.mode);
   const setMode = useWindowMode((s) => s.setMode);
   const cycle = useWindowMode((s) => s.cycle);
+  const onboarded = useIsOnboarded();
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -98,6 +98,16 @@ export function TopBar() {
         >
           <span className="label">⌘.</span>
         </button>
+        {onboarded && (
+          <button
+            className="topbar__cycle"
+            onClick={() => openOnboardingAt(0)}
+            title="重新配置 Lumina (⌘,)"
+            aria-label="重新配置 Lumina"
+          >
+            <span className="label">⌘,</span>
+          </button>
+        )}
         <div className="topbar__clock">
           <span className="mono topbar__time">
             {now.toLocaleTimeString('zh-CN', { hour12: false })}
