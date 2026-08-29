@@ -1,0 +1,4 @@
+target/
+gen/schemas/
+WixTools/
+*.pdb

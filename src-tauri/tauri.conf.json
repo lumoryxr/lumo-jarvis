@@ -1,0 +1,38 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "productName": "Lumo JARVIS",
+  "version": "0.1.0",
+  "identifier": "com.lumoryxr.jarvis",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Lumo JARVIS",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 600,
+        "decorations": false,
+        "transparent": true,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png"
+    ]
+  },
+  "plugins": {}
+}

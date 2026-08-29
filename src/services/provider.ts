@@ -48,4 +48,6 @@ export interface Provider {
   retryTask(taskId: string): Promise<void>;
   /** Force the first-contact greeting to fire now (P0-F: called after onboarding). */
   greetNow?(): void;
+  /** P0-H: approve a proactive proposal and spawn the suggested task. */
+  acceptProposal?(proposalId: string): Promise<void>;
 }

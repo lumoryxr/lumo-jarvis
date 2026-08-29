@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { useOnboarding, PRESET_CATALOGUE, VOICE_CATALOGUE } from '../state/onboarding';
 import { type Proactiveness } from '../state/proactiveness';
+import { usePersona } from '../state/persona';
+import { useActivity } from '../state/activity';
 import './OnboardingWizard.css';
 
 /**
@@ -73,20 +75,43 @@ const STEPS = ['欢迎', '性格', '名字', '节奏', '完成'] as const;
 /* ---------------------------------------------- step: welcome */
 
 function StepWelcome() {
+  const isSettings = useOnboarding((s) => s.completed);
   return (
     <section className="onb__step">
-      <h1 id="onb-title" className="onb__h1">先认识一下。</h1>
+      <h1 id="onb-title" className="onb__h1">
+        {isSettings ? '调整一下她的设定。' : '先认识一下。'}
+      </h1>
       <p className="onb__lead">
-        接下来 5 步,大概 1 分钟。
-        你会选她的性格、给她起名、定一下她一天开口的节奏。
+        {isSettings
+          ? '你已经选过了。重新走一遍会覆盖你之前的所有选择 —— 包括记忆也会被清空。'
+          : '接下来 5 步,大概 1 分钟。你会选她的性格、给她起名、定一下她一天开口的节奏。'}
       </p>
       <ul className="onb__bullets">
         <li><span className="onb__bullet-tag">性格</span> 8 种预设,决定她说话的温度和方式。</li>
         <li><span className="onb__bullet-tag">名字</span> 她回应你时怎么称呼自己。</li>
         <li><span className="onb__bullet-tag">声音</span> M4 接 TTS 时会用上,先选个偏好。</li>
         <li><span className="onb__bullet-tag">节奏</span> 她每天主动开口几次、什么时候安静。</li>
-        <li><span className="onb__bullet-tag">完成</span> 之后随时可以从右上角回来调整。</li>
+        <li><span className="onb__bullet-tag">{isSettings ? '清空' : '完成'}</span> {isSettings ? '一键清空记忆、活动、提议记录,然后回到默认。' : '之后随时可以从右上角回来调整。'}</li>
       </ul>
+      {isSettings && (
+        <button
+          className="onb__btn onb__btn--danger"
+          onClick={() => {
+            // Reset everything that onboarding owns.
+            useOnboarding.getState().reset();
+            try { localStorage.removeItem('lumo.memories.v1'); } catch { /* ignore */ }
+            // Wipe in-memory stores too.
+            const persona = usePersona.getState();
+            const memSnap = persona.memories.slice();
+            for (const m of memSnap) persona.removeMemory(m.id);
+            const propSnap = persona.proposals.slice();
+            for (const p of propSnap) persona.dismissProposal(p.id);
+            useActivity.getState().clear();
+          }}
+        >
+          清空记忆 & 重新开始
+        </button>
+      )}
     </section>
   );
 }

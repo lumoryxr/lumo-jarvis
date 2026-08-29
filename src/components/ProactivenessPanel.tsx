@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { usePersona } from '../state/persona';
 import { useProactiveness, ALL_TRIGGERS, inQuietHours, type Proactiveness } from '../state/proactiveness';
+import { useSession, provider } from '../state/session';
 import type { Proposal } from '../core/types';
 import './ProactivenessPanel.css';
 
@@ -38,6 +39,16 @@ const TONE_TINT: Record<NonNullable<Proposal['tone']>, string> = {
 export function ProactivenessPanel() {
   const proposals = usePersona((s) => s.proposals);
   const dismissProposal = usePersona((s) => s.dismissProposal);
+
+  // P0-H: accepting a proposal spawns a real task. Wire it to the provider
+  // (MockBackend.acceptProposal in the prototype; will hit Hermes / OS in M1).
+  const accept = async (p: Proposal) => {
+    dismissProposal(p.id);
+    try { await provider.acceptProposal?.(p.id); }
+    // If the provider doesn't know that proposal id, fall back to a direct
+    // send() with a natural-language version so the user always sees motion.
+    catch { useSession.getState().send(`帮我做:${p.reasoning}`); }
+  };
 
   const band = useProactiveness((s) => s.band);
   const config = useProactiveness((s) => s.config);
@@ -177,7 +188,7 @@ export function ProactivenessPanel() {
                 </div>
               )}
               <div className="props__item-actions">
-                <button className="props__btn is-primary" onClick={() => dismissProposal(p.id)}>
+                <button className="props__btn is-primary" onClick={() => accept(p)}>
                   {p.suggestedTask ? '考虑下' : '知道了'}
                 </button>
                 <button className="props__btn" onClick={() => dismissProposal(p.id)}>

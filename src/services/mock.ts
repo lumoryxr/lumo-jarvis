@@ -333,6 +333,42 @@ function synthCI() {
   ];
 }
 
+/**
+ * P0-H: when the user clicks "考虑下" on a proposal, we spawn one of these
+ * tasks. In a real backend this would shell out to Hermes; in the prototype
+ * we just put a believable task on the board with the right executor.
+ */
+const ACCEPTED_PROPOSAL_SEEDS: Record<string, Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'steps' | 'status' | 'progress'>> = {
+  'metric.disk': {
+    title: '扫描 ~/Downloads 的 30 天前旧文件',
+    intent: '出清单,不动手,等你批准',
+    executor: 'local',
+    project: 'workstation',
+    tags: ['fs', 'tidy', 'needs-approval'],
+  },
+  'metric.mem': {
+    title: '排查内存占用',
+    intent: '找出内存大头,出报告',
+    executor: 'local',
+    project: 'workstation',
+    tags: ['health'],
+  },
+  'proc.node': {
+    title: '检查 node 进程 CPU 占用',
+    intent: '看是不是它正常的工作状态,再决定是否结束',
+    executor: 'local',
+    project: 'workstation',
+    tags: ['process', 'health'],
+  },
+  'ci.lumo-core': {
+    title: '让 Hermes 诊断 lumo-core@main 失败原因',
+    intent: '拉日志 + 定位 + 给修复方案',
+    executor: 'hermes',
+    project: 'lumo-core',
+    tags: ['ci', 'diagnose'],
+  },
+};
+
 /* --------------------------------------------------------------- backend */
 
 const PRESET: PersonaPreset = 'teasing_flirty';
@@ -486,6 +522,39 @@ export class MockBackend implements Provider {
     this.timers.push(setTimeout(() => {
       this.emit({ kind: 'message.end', id });
     }, 1400) as unknown as number);
+  }
+
+  /**
+   * P0-H: the user approved a proactive proposal — turn its suggestedTask
+   * into a real Task on the board and dismiss the proposal. Idempotent;
+   * unknown ids no-op.
+   */
+  async acceptProposal(proposalId: string) {
+    // We don't keep the proposal list here (the persona store owns it);
+    // we trust the caller and just spawn whatever suggestedTask is implied.
+    // For the prototype we hard-code the canonical seed tasks by trigger.
+    const seed = ACCEPTED_PROPOSAL_SEEDS[proposalId];
+    if (!seed) return;
+    const now = Date.now();
+    const task: Task = {
+      ...seed,
+      id: uid(),
+      status: 'running',
+      progress: 0.08,
+      createdAt: now,
+      updatedAt: now,
+      externalId: `run_${uid().slice(0, 6)}`,
+      steps: STEP_LABELS.map((label, i) => ({
+        id: uid(),
+        label,
+        status: (i === 0 ? 'running' : 'queued') as TaskStatus,
+        at: now,
+      })),
+    };
+    this.tasks.set(task.id, task);
+    this.emit({ kind: 'task.upsert', task });
+    this.pushEmotion('happy', 0.5, 'task accepted');
+    this.pushAction('smile_wide');
   }
 
   stop() {

@@ -37,6 +37,9 @@ export function CompanionWidget() {
   const mode = useWindowMode((s) => s.mode);
   const pos = useWindowMode((s) => s.pos);
   const setPos = useWindowMode((s) => s.setPos);
+  const size = useWindowMode((s) => s.size);
+  const setSize = useWindowMode((s) => s.setSize);
+  const resetSize = useWindowMode((s) => s.resetSize);
   const setMode = useWindowMode((s) => s.setMode);
 
   const agentState = useSession((s) => s.agentState);
@@ -126,7 +129,7 @@ export function CompanionWidget() {
     <div
       ref={rootRef}
       className={`companion-widget ${dragging ? 'is-dragging' : ''}`}
-      style={{ left: pos.x, top: pos.y }}
+      style={{ left: pos.x, top: pos.y, width: size.w, height: size.h }}
       role="dialog"
       aria-label={`${name} 浮窗`}
     >
@@ -185,6 +188,32 @@ export function CompanionWidget() {
           {subtitle}
         </p>
       </footer>
+
+      <div
+        className="companion-widget__resize"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const startX = e.clientX;
+          const startY = e.clientY;
+          const startW = size.w;
+          const startH = size.h;
+          const move = (ev: PointerEvent) => {
+            const nw = Math.round(startW + (ev.clientX - startX));
+            const nh = Math.round(startH + (ev.clientY - startY));
+            setSize({ w: nw, h: nh });
+          };
+          const up = () => {
+            window.removeEventListener('pointermove', move);
+            window.removeEventListener('pointerup', up);
+          };
+          window.addEventListener('pointermove', move);
+          window.addEventListener('pointerup', up);
+        }}
+        onDoubleClick={() => resetSize()}
+        title="拖拽调整大小 · 双击重置"
+        aria-label="调整浮窗大小"
+      />
 
       {expanded && (
         <div className="companion-widget__chat">

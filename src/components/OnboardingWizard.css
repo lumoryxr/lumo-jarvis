@@ -471,3 +471,12 @@ kbd {
   color: var(--cyan-soft);
 }
 .onb__btn--ghost { background: transparent; }
+.onb__btn--danger {
+  margin-top: 12px;
+  border-color: rgba(255, 77, 141, 0.4);
+  color: var(--magenta);
+}
+.onb__btn--danger:hover {
+  background: rgba(255, 77, 141, 0.12);
+  color: var(--magenta);
+}

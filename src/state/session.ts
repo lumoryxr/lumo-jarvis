@@ -7,6 +7,7 @@ import { MockBackend } from '../services/mock';
 import { DEFAULT_WATCHERS } from '../services/watchers';
 import { usePersona, startMemoryDecay } from './persona';
 import { useProactiveness, startProactivenessDailyReset } from './proactiveness';
+import { recordActivity } from './activity';
 
 /**
  * Single source of truth for the whole window.
@@ -30,6 +31,9 @@ const provider: Provider = new MockBackend({ watchers: DEFAULT_WATCHERS });
 const EMPTY_COUNTS: Record<TaskStatus, number> = {
   queued: 0, running: 0, blocked: 0, review: 0, done: 0, failed: 0, cancelled: 0,
 };
+
+/** P0-J: only record the FIRST greeting in a session. */
+let greetedRecorded = false;
 
 interface SessionState {
   agentState: AgentState;
@@ -71,6 +75,14 @@ export const useSession = create<SessionState>((set) => ({
       switch (event.kind) {
         case 'message.start':
           set((s) => ({ messages: [...s.messages, event.message], agentState: 'thinking' }));
+          // P0-J: greet arrives as message.start; record it once per session.
+          if (!greetedRecorded) {
+            greetedRecorded = true;
+            recordActivity({
+              kind: 'greeting',
+              title: event.message.text || '打了个招呼',
+            });
+          }
           break;
 
         case 'message.delta':
@@ -114,8 +126,18 @@ export const useSession = create<SessionState>((set) => ({
           set((s) => {
             const i = s.tasks.findIndex((t) => t.id === event.task.id);
             if (i === -1) return { tasks: [event.task, ...s.tasks] };
+            const prev = s.tasks[i];
             const tasks = [...s.tasks];
             tasks[i] = event.task;
+            // Activity fire only on *transition* (avoid spam on every tick).
+            if (prev.status !== event.task.status && (event.task.status === 'done' || event.task.status === 'failed')) {
+              recordActivity({
+                kind: event.task.status === 'done' ? 'task_completed' : 'task_failed',
+                title: event.task.status === 'done' ? `完成：${event.task.title}` : `失败：${event.task.title}`,
+                detail: event.task.result,
+                ref: { kind: 'task', id: event.task.id },
+              });
+            }
             return { tasks };
           });
           break;
@@ -145,6 +167,12 @@ export const useSession = create<SessionState>((set) => ({
           break;
         case 'proposal':
           usePersona.getState().pushProposal(event.proposal);
+          recordActivity({
+            kind: 'proposal_surfaced',
+            title: event.proposal.reasoning,
+            detail: event.proposal.suggestedTask ? `任务：${event.proposal.suggestedTask.title}` : undefined,
+            ref: { kind: 'proposal', id: event.proposal.id },
+          });
           break;
         case 'persona':
           usePersona.getState().setPersona(event.preset, event.name);

@@ -77,14 +77,37 @@ export function AvatarStage() {
   useEffect(() => coreRef.current?.setMood(mood), [mood]);
 
   // While streaming a reply we have no real audio envelope, so synthesise one
-  // from the text growing. It keeps the core alive in step with the words.
+  // P0-I: per-character rhythm with rests after punctuation. We pick the next
+  // *unspoken* character's consonant class (vowel -> peak, consonant -> soft)
+  // and add a rest every comma/period so the avatar doesn't mouth continuous
+  // drone. ~75ms cadence is enough to feel like speech without burning CPU.
   useEffect(() => {
     if (agentState !== 'speaking') return;
+    const msg = lastJarvis;
+    if (!msg) return;
+    const text = msg.text;
+    let i = msg.text.length;  // start at the *new* chars since last update
+    const vowel = /[aeiouyAEIOUY一-鿿]/;
+    const rest = /[,。！？.!?:;…]/;
     const id = setInterval(() => {
-      useSession.getState().setAmplitude(0.28 + Math.random() * 0.5);
-    }, 110);
+      // Pull the latest text length every tick (don't read a stale snapshot).
+      const cur = useSession.getState().messages.find((m) => m.id === msg.id);
+      const len = cur?.text.length ?? i;
+      const ch = text[len - 1] ?? ' ';
+      if (rest.test(ch)) {
+        // brief silence — let the avatar settle between phrases.
+        useSession.getState().setAmplitude(0.04);
+      } else if (vowel.test(ch)) {
+        // vowels / hanzi carry weight — mouth opens wider.
+        useSession.getState().setAmplitude(0.5 + Math.random() * 0.35);
+      } else {
+        // consonants are sharper but smaller.
+        useSession.getState().setAmplitude(0.18 + Math.random() * 0.22);
+      }
+      i = len;
+    }, 75);
     return () => clearInterval(id);
-  }, [agentState]);
+  }, [agentState, lastJarvis]);
 
   const busy = agentState === 'thinking' || agentState === 'acting' || agentState === 'speaking';
   const showEmotion = emotion !== 'neutral' && emotionIntensity > 0.15;
