@@ -9,7 +9,7 @@ import { CompanionWidget } from './components/CompanionWidget';
 import { MemoryConsole } from './components/MemoryConsole';
 import OnboardingWizard, { useIsOnboarded, openOnboardingAt } from './components/OnboardingWizard';
 import { useOnboarding } from './state/onboarding';
-import { useSession } from './state/session';
+import { useSession, provider } from './state/session';
 import { useWindowMode, installWindowModeHotkeys } from './state/windowMode';
 import './App.css';
 
@@ -52,6 +52,11 @@ export default function App() {
   // first paint. The wizard handles its own applyTo on the reopen path; this
   // covers the first-commit path where the wizard itself unmounts.
   useOnboarding.getState().applyTo();
+
+  // P0-F: now that persona.name is correct, trigger the greeting on the
+  // backend (if the provider supports it). MockBackend.greetNow() is a
+  // no-op for providers without first-contact logic.
+  provider.greetNow?.();
 
   return (
     <div className="app">

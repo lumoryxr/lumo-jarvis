@@ -46,4 +46,6 @@ export interface Provider {
   cancelTask(taskId: string): Promise<void>;
   /** Re-run a failed task with the same intent. */
   retryTask(taskId: string): Promise<void>;
+  /** Force the first-contact greeting to fire now (P0-F: called after onboarding). */
+  greetNow?(): void;
 }

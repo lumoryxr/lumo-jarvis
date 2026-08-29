@@ -4,6 +4,7 @@ import type {
   MachineSnapshot, Metric, ToolCall,
 } from '../core/types';
 import { useProactiveness } from '../state/proactiveness';
+import { usePersona } from '../state/persona';
 import { runWatchers, type WatcherSnapshot, type Watcher } from './watchers';
 
 /**
@@ -337,6 +338,23 @@ function synthCI() {
 const PRESET: PersonaPreset = 'teasing_flirty';
 const NAME = 'Lumina';
 
+/**
+ * Per-preset first-greeting tone. The same preset shouldn't say hi with the
+ * same intonation across all 8 personas — a 沉静内敛 persona opening with
+ * "smile_wide + playful 0.6" reads wrong. This table keeps the opening
+ * beat faithful to the persona the user picked in onboarding.
+ */
+const FIRST_GREET_TONE: Record<PersonaPreset, { emotion: Emotion; intensity: number; action: PersonaAction }> = {
+  warm_curious:       { emotion: 'curious',  intensity: 0.55, action: 'tilt_head' },
+  playful_witty:      { emotion: 'playful',  intensity: 0.7,  action: 'smile_wide' },
+  gentle_caring:      { emotion: 'tender',   intensity: 0.6,  action: 'smile_wide' },
+  cool_professional:  { emotion: 'neutral',  intensity: 0.4,  action: 'raise_eyebrow' },
+  energetic_cheerful: { emotion: 'happy',    intensity: 0.7,  action: 'smile_wide' },
+  calm_introspective: { emotion: 'neutral',  intensity: 0.3,  action: 'tilt_head' },
+  teasing_flirty:     { emotion: 'playful',  intensity: 0.6,  action: 'smile_wide' },
+  mature_warm:        { emotion: 'tender',   intensity: 0.55, action: 'smile_wide' },
+};
+
 /** Baseline mood she'd return to when nothing's happening. */
 const BASELINE_MOOD: Mood = { valence: 0.35, arousal: 0.1, dominance: 0.05, intimacy: 0.45 };
 
@@ -412,33 +430,55 @@ export class MockBackend implements Provider {
 
     /* ---------- P0-A: companion startup ---------- */
     // 1. Announce the persona (the UI's name + greeting reference).
-    this.emit({ kind: 'persona', preset: PRESET, name: NAME });
+    //    P0-F: read the live choices from onboarding so the persona event
+    //    matches what the user just picked (or what they reopened to).
+    this.emit({
+      kind: 'persona',
+      preset: usePersona.getState().preset,
+      name: usePersona.getState().name,
+    });
     // 2. Push the baseline mood so the avatar has a colour, not pure black.
     this.pushMood(BASELINE_MOOD);
-    // 3. Greet the user after a short delay so it doesn't fight the boot flow.
-    this.timers.push(setTimeout(() => this.greet(), 900) as unknown as number);
+    // 3. Greet is no longer auto-fired here. P0-F: App.tsx waits for the
+    //    onboarding commit (so the name is in the persona store) and then
+    //    calls `provider.greetNow?.()`. This avoids the race where greet()
+    //    ran 900ms after boot with the default name.
   }
 
-  /** First-contact greeting — distinct from the boot message in the transcript. */
+  /** P0-F: trigger the first-contact greeting on demand. Idempotent. */
+  greetNow() {
+    if (this.booted) this.greet();
+  }
+
+  /** First-contact greeting — distinct from the boot message in the transcript.
+   *  P0-F: name + greeting tone both come from the live persona + onboarding
+   *  choices, so she introduces herself under whatever name the user picked. */
   private greet() {
     if (this.greeted) return;
     this.greeted = true;
     const hour = new Date().getHours();
     const part = hour < 5 ? '凌晨好' : hour < 11 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
-    this.pushEmotion('playful', 0.6, 'first contact');
-    this.pushAction('smile_wide');
+    const persona = usePersona.getState();
+    const name = persona.name || NAME;
+    const preset = persona.preset || PRESET;
+    const tone = FIRST_GREET_TONE[preset] ?? { emotion: 'playful', intensity: 0.6, action: 'smile_wide' };
+
+    this.pushEmotion(tone.emotion, tone.intensity, 'first contact');
+    this.pushAction(tone.action);
+
+    const line = `${part}。我是 ${name},今天陪你。`;
     this.emit({
       kind: 'message.start',
       message: {
         id: uid(),
         speaker: 'jarvis',
         at: Date.now(),
-        text: `${part}。我是 Lumina,今天陪你。`,
+        text: line,
         streaming: true,
       },
     });
     const id = 'greet';
-    for (const piece of `${part}。我是 Lumina,今天陪你。`.match(/.{1,2}/gs) ?? []) {
+    for (const piece of line.match(/.{1,2}/gs) ?? []) {
       this.timers.push(setTimeout(() => {
         this.emit({ kind: 'message.delta', id, text: piece });
       }, 80 + Math.random() * 60) as unknown as number);
