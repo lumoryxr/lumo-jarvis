@@ -57,6 +57,10 @@ export function ProactivenessPanel() {
   const setBand = useProactiveness((s) => s.setBand);
   const patchConfig = useProactiveness((s) => s.patchConfig);
   const setTriggerEnabled = useProactiveness((s) => s.setTriggerEnabled);
+  // Local mirror of quiet hours so the inputs feel responsive even when
+  // the user types faster than the store update broadcasts.
+  const [quietStart, setQuietStart] = useState(config.quietStart);
+  const [quietEnd, setQuietEnd] = useState(config.quietEnd);
 
   const [showSettings, setShowSettings] = useState(false);
   const quiet = inQuietHours(config);
@@ -134,15 +138,40 @@ export function ProactivenessPanel() {
             <span className="label">安静开始</span>
             <input
               type="number" min={0} max={23}
-              value={config.quietStart}
-              onChange={(e) => patchConfig({ quietStart: Number(e.target.value) })}
+              value={quietStart}
+              onChange={(e) => { const v = Number(e.target.value); setQuietStart(v); patchConfig({ quietStart: v, quietEnd }); }}
+              className="onb__quiet-input"
             />
             <span className="label">结束</span>
             <input
               type="number" min={0} max={23}
-              value={config.quietEnd}
-              onChange={(e) => patchConfig({ quietEnd: Number(e.target.value) })}
+              value={quietEnd}
+              onChange={(e) => { const v = Number(e.target.value); setQuietEnd(v); patchConfig({ quietStart, quietEnd: v }); }}
+              className="onb__quiet-input"
             />
+          </div>
+          {/* P0-S: per-trigger thresholds. The watcher engine reads these. */}
+          <div className="props__row">
+            <span className="label">磁盘告警</span>
+            <input
+              type="range" min={5} max={40} step={1}
+              value={Math.round(config.thresholds.diskFreeBelow * 100)}
+              onChange={(e) => patchConfig({
+                thresholds: { ...config.thresholds, diskFreeBelow: Number(e.target.value) / 100 },
+              })}
+            />
+            <span className="mono props__num">≤ {Math.round(config.thresholds.diskFreeBelow * 100)}%</span>
+          </div>
+          <div className="props__row">
+            <span className="label">指标告警</span>
+            <input
+              type="range" min={60} max={98} step={1}
+              value={Math.round(config.thresholds.metricAbove * 100)}
+              onChange={(e) => patchConfig({
+                thresholds: { ...config.thresholds, metricAbove: Number(e.target.value) / 100 },
+              })}
+            />
+            <span className="mono props__num">≥ {Math.round(config.thresholds.metricAbove * 100)}%</span>
           </div>
           <ul className="props__triggers">
             {ALL_TRIGGERS.map((t) => (

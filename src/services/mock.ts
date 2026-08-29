@@ -5,6 +5,7 @@ import type {
 } from '../core/types';
 import { useProactiveness } from '../state/proactiveness';
 import { usePersona } from '../state/persona';
+import { useOnboarding } from '../state/onboarding';
 import { runWatchers, type WatcherSnapshot, type Watcher } from './watchers';
 
 /**
@@ -391,6 +392,20 @@ const FIRST_GREET_TONE: Record<PersonaPreset, { emotion: Emotion; intensity: num
   mature_warm:        { emotion: 'tender',   intensity: 0.55, action: 'smile_wide' },
 };
 
+/** P0-V: greeting templates by language. Hour-keyed prefix preserved. */
+const GREETINGS: Record<'zh' | 'en', (name: string) => string> = {
+  zh: (name) => {
+    const hour = new Date().getHours();
+    const part = hour < 5 ? '凌晨好' : hour < 11 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
+    return `${part}。我是 ${name},今天陪你。`;
+  },
+  en: (name) => {
+    const hour = new Date().getHours();
+    const part = hour < 5 ? 'Still up' : hour < 11 ? 'Good morning' : hour < 14 ? 'Hey' : hour < 18 ? 'Afternoon' : 'Evening';
+    return `${part}. I'm ${name}, with you today.`;
+  },
+};
+
 /** Baseline mood she'd return to when nothing's happening. */
 const BASELINE_MOOD: Mood = { valence: 0.35, arousal: 0.1, dominance: 0.05, intimacy: 0.45 };
 
@@ -418,6 +433,11 @@ export class MockBackend implements Provider {
 
   private emit(event: ProviderEvent) {
     for (const l of this.listeners) l(event);
+  }
+
+  /** P0-M: annotate the last jarvis message with the memories it used. */
+  private tagMessageWithMemories(messageId: string, ids: string[]) {
+    this.emit({ kind: 'message.memoryRefs', messageId, ids });
   }
 
   /** Helper to push companion-layer events without spelling out `kind` each time. */
@@ -462,6 +482,11 @@ export class MockBackend implements Provider {
       setInterval(() => this.tickTasks(), 2600) as unknown as number,
       // P0-D: run watchers on a 5s cadence so demo signals surface quickly.
       setInterval(() => this.tickWatchers(), 5000) as unknown as number,
+      // P0-P: idle micro-actions. ~once every 25-40s, push a small
+      // persona action so the avatar doesn't look frozen when the user
+      // is idle. Gated by the agent state so we don't fire while the
+      // user is actively in a turn.
+      setInterval(() => this.maybeFireIdleAction(), 12000) as unknown as number,
     );
 
     /* ---------- P0-A: companion startup ---------- */
@@ -488,33 +513,33 @@ export class MockBackend implements Provider {
 
   /** First-contact greeting — distinct from the boot message in the transcript.
    *  P0-F: name + greeting tone both come from the live persona + onboarding
-   *  choices, so she introduces herself under whatever name the user picked. */
+   *  choices, so she introduces herself under whatever name the user picked.
+   *  P0-V: greets in the user's chosen language. */
   private greet() {
     if (this.greeted) return;
     this.greeted = true;
-    const hour = new Date().getHours();
-    const part = hour < 5 ? '凌晨好' : hour < 11 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
     const persona = usePersona.getState();
     const name = persona.name || NAME;
     const preset = persona.preset || PRESET;
     const tone = FIRST_GREET_TONE[preset] ?? { emotion: 'playful', intensity: 0.6, action: 'smile_wide' };
+    const lang = (useOnboarding.getState().language) || 'zh';
+    const greetLine = GREETINGS[lang](name);
 
     this.pushEmotion(tone.emotion, tone.intensity, 'first contact');
     this.pushAction(tone.action);
 
-    const line = `${part}。我是 ${name},今天陪你。`;
     this.emit({
       kind: 'message.start',
       message: {
         id: uid(),
         speaker: 'jarvis',
         at: Date.now(),
-        text: line,
+        text: greetLine,
         streaming: true,
       },
     });
     const id = 'greet';
-    for (const piece of line.match(/.{1,2}/gs) ?? []) {
+    for (const piece of greetLine.match(/.{1,2}/gs) ?? []) {
       this.timers.push(setTimeout(() => {
         this.emit({ kind: 'message.delta', id, text: piece });
       }, 80 + Math.random() * 60) as unknown as number);
@@ -555,6 +580,25 @@ export class MockBackend implements Provider {
     this.emit({ kind: 'task.upsert', task });
     this.pushEmotion('happy', 0.5, 'task accepted');
     this.pushAction('smile_wide');
+  }
+
+  /** P0-P: pick a small action that fits the current persona's mood. */
+  private maybeFireIdleAction() {
+    // Only fire when idle (not in the middle of a turn).
+    const lastMsg = [...this.tasks.values()].find((t) => t.status === 'running');
+    if (lastMsg) return;
+    const persona = usePersona.getState();
+    if (persona.emotionIntensity > 0.5) return;          // already expressing
+    if (persona.lastAction) return;                    // one in flight
+    // Mood-keyed pool. Higher valence = more positive actions.
+    const v = persona.mood.valence;
+    const pool: PersonaAction[] = v > 0.2
+      ? ['smile_wide', 'tilt_head', 'look_away']
+      : v < -0.2
+        ? ['sigh', 'look_away', 'blink_slow']
+        : ['tilt_head', 'look_away', 'blink_slow'];
+    const action = pool[Math.floor(Math.random() * pool.length)];
+    this.pushAction(action);
   }
 
   stop() {
@@ -647,7 +691,7 @@ export class MockBackend implements Provider {
 
     if (!this.watchers.length) return;  // No watchers wired — nothing to do.
 
-    const proposals = runWatchers(snap, this.watchers);
+    const proposals = runWatchers(snap, this.watchers, useProactiveness.getState().config.thresholds);
     const policy = useProactiveness.getState();
     for (const p of proposals) {
       if (!policy.mayFire(p.trigger)) continue;
@@ -682,11 +726,16 @@ export class MockBackend implements Provider {
     if (script.emotion) at(40, () => this.pushEmotion(script.emotion!.emotion, script.emotion!.intensity, script.emotion!.trigger));
     if (script.action) at(80, () => this.pushAction(script.action!));
 
-    /* P0-A: extract memories from the user's text. */
+    /* P0-A: extract memories from the user's text. Run every rule — one
+     * long sentence can carry a name, a preference, and an event, and we
+     * shouldn't make the user repeat themselves. */
     const mems = extractMemories(text);
+    const newMemoryIds: string[] = [];
     if (mems.length) at(60, () => {
       for (const m of mems) {
-        this.pushMemory({ ...m, id: uid(), ts: Date.now(), source: 'told' });
+        const id = uid();
+        newMemoryIds.push(id);
+        this.pushMemory({ ...m, id, ts: Date.now(), source: 'told' });
       }
     });
 
@@ -747,6 +796,12 @@ export class MockBackend implements Provider {
     at(delay + 120, () => {
       this.emit({ kind: 'message.end', id: messageId });
       this.emit({ kind: 'speech', text: script.reply.join(''), done: true });
+      /* P0-M: attach the memory ids we surfaced during this turn to the
+       * message we just finished. The session store reads this and tags
+       * the Message. Lets the UI say "she used 3 things she remembered". */
+      if (newMemoryIds.length) {
+        this.tagMessageWithMemories(messageId, newMemoryIds);
+      }
       /* P0-A: drift mood back toward baseline after the turn, like exhaling. */
       this.pushMood(BASELINE_MOOD);
     });

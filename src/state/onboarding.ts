@@ -32,6 +32,8 @@ export interface OnboardingChoices {
   proactivenessBand: 'silent' | 'companion' | 'chatty' | 'custom';
   quietStart: number;
   quietEnd: number;
+  /** P0-V: greeting language. Affects the boot line + a few UI labels. */
+  language: 'zh' | 'en';
 }
 
 export const DEFAULT_CHOICES: OnboardingChoices = {
@@ -41,6 +43,7 @@ export const DEFAULT_CHOICES: OnboardingChoices = {
   proactivenessBand: 'companion',
   quietStart: 22,
   quietEnd: 8,
+  language: 'zh',
 };
 
 interface Persisted {
@@ -85,6 +88,8 @@ interface OnboardingState extends OnboardingChoices {
   setPreset: (p: PersonaPreset) => void;
   setName: (n: string) => void;
   setVoiceId: (v: string) => void;
+  /** P0-V: greeting language. Affects the boot line + a few UI labels. */
+  setLanguage: (l: 'zh' | 'en') => void;
   setProactivenessBand: (b: OnboardingChoices['proactivenessBand']) => void;
   setQuietHours: (start: number, end: number) => void;
   /** Persist current choices and mark onboarding as done. */
@@ -122,6 +127,7 @@ export const useOnboarding = create<OnboardingState>((set) => {
     })),
     setName: (name) => set({ name: name.trim().slice(0, 16) || DEFAULT_CHOICES.name }),
     setVoiceId: (voiceId) => set({ voiceId }),
+    setLanguage: (language: 'zh' | 'en') => set({ language }),
     setProactivenessBand: (band) => set({ proactivenessBand: band }),
     setQuietHours: (quietStart, quietEnd) => set({ quietStart, quietEnd }),
 
@@ -164,6 +170,7 @@ function persist() {
         proactivenessBand: s.proactivenessBand,
         quietStart: s.quietStart,
         quietEnd: s.quietEnd,
+        language: s.language,
       },
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));

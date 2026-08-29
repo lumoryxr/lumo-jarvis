@@ -374,8 +374,20 @@ export class HoloCore {
     this.glowUniforms.uTime.value = t;
     this.glowUniforms.uIntensity.value = 0.42 + this.amp * 0.5 + this.look.turbulence * 0.14 + this.moodNow.brightnessAdd * 0.6;
 
+    // P0-N: breath cycle (slow vertical scale), state lean, and head tilt
+    // that subtly tracks the speaking/listening rhythm. breath is a global
+    // ~6s cycle, state-specific lean overlays on top of the spin.
+    const breath = 0.5 + 0.5 * Math.sin(t * 1.05);     // 0..1, ~6s period
+    const breathScale = 0.985 + breath * 0.03;         // 0.985..1.015
+    const stateLean = this.ampTarget > 0.4 ? 0.10 : 0;  // speaking: forward
+    const idleTilt = Math.sin(t * 0.5) * 0.04;          // gentle idle sway
+    this.core.scale.set(
+      breathScale,
+      breathScale * (1 - 0.04 * this.amp),             // squeeze slightly while speaking
+      breathScale,
+    );
     this.core.rotation.y += (this.look.spin + this.moodNow.spinAdd) * dt;
-    this.core.rotation.x = Math.sin(t * 0.14) * 0.12;
+    this.core.rotation.x = Math.sin(t * 0.14) * 0.12 + stateLean + idleTilt;
     this.wire.rotation.copy(this.core.rotation);
     this.halo.rotation.y -= (this.look.spin + this.moodNow.spinAdd) * 0.4 * dt;
 

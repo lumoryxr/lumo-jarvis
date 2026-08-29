@@ -24,6 +24,7 @@ export type ProviderEvent =
   | { kind: 'machine'; snapshot: MachineSnapshot }
   | { kind: 'connector'; status: ConnectorStatus }
   | { kind: 'speech'; text: string; done: boolean }
+  | { kind: 'message.memoryRefs'; messageId: string; ids: string[] }
   /* -- companion layer (P0-A) -------------------------------------------- */
   | { kind: 'mood'; mood: Mood }
   | { kind: 'emotion'; emotion: import('../core/types').Emotion; intensity: number; trigger?: string }

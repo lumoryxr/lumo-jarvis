@@ -249,6 +249,12 @@ function MinimizedBubble() {
   const emotion = usePersona((s) => s.emotion);
   const emotionIntensity = usePersona((s) => s.emotionIntensity);
   const agentState = useSession((s) => s.agentState);
+  // P0-L: show a one-line preview of her last line under the dot so
+  // the minimised state isn't just "she's there" — it tells the user
+  // what she'd say if you expanded.
+  const lastJarvis = useSession((s) => [...s.messages].reverse().find((m) => m.speaker === 'jarvis'));
+  const preview = lastJarvis?.text.split('\n').find((l) => l.trim().length > 0) ?? '';
+  const truncated = preview.length > 38 ? `${preview.slice(0, 38)}…` : preview;
 
   const tintHue = Math.round(((mood.valence + 1) / 2) * 60 + 170); // 170..230
   const tintStyle: React.CSSProperties = {
@@ -259,17 +265,22 @@ function MinimizedBubble() {
   };
 
   return (
-    <button
-      className="companion-min"
-      onClick={() => setMode('widget')}
-      aria-label="展开 Lumina"
-      title="展开 Lumina"
-    >
-      <span className="companion-min__core" style={tintStyle} />
-      {emotion !== 'neutral' && emotionIntensity > 0.2 && (
-        <span className="companion-min__emotion" key={emotion} />
+    <div className="companion-min-wrap" onClick={() => setMode('widget')}>
+      <button
+        className="companion-min"
+        onClick={(e) => { e.stopPropagation(); setMode('widget'); }}
+        aria-label="展开 Lumina"
+        title="展开 Lumina"
+      >
+        <span className="companion-min__core" style={tintStyle} />
+        {emotion !== 'neutral' && emotionIntensity > 0.2 && (
+          <span className="companion-min__emotion" key={emotion} />
+        )}
+        {agentState === 'thinking' && <span className="companion-min__think" aria-hidden />}
+      </button>
+      {truncated && (
+        <div className="companion-min__preview" key={lastJarvis?.id}>{truncated}</div>
       )}
-      {agentState === 'thinking' && <span className="companion-min__think" aria-hidden />}
-    </button>
+    </div>
   );
 }

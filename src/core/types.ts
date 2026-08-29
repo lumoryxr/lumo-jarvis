@@ -43,6 +43,9 @@ export interface Message {
   toolCalls?: ToolCall[];
   /** Set when this turn spawned a tracked task. */
   taskId?: string;
+  /** P0-M: memories the mock surfaced while composing this reply.
+   *  Lets the user see "she used 3 things she remembered" — a trust cue. */
+  memoryRefs?: string[];
 }
 
 /* ------------------------------------------------------------------- task */

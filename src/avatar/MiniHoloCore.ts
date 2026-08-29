@@ -270,9 +270,16 @@ export class MiniHoloCore {
     this.wire.scale.set(1, blinkScale, 1);
 
     // Idle float — bobs gently to feel "alive" even when nothing's happening.
+    // P0-N: breath cycle + speaking lean for the mini widget.
+    const breath = 0.5 + 0.5 * Math.sin(t * 1.05);
+    const breathScale = 0.985 + breath * 0.03;
+    const lean = this.ampTarget > 0.4 ? 0.10 : 0;
+    this.core.scale.set(breathScale, breathScale * (1 - 0.04 * this.amp), breathScale);
+    this.core.rotation.x = Math.sin(t * 0.14) * 0.12 + lean;
     const floatY = Math.sin(t * 0.6) * 0.05;
     this.core.position.y = floatY;
     this.wire.position.y = floatY;
+    this.wire.scale.set(breathScale, breathScale * (1 - 0.04 * this.amp), breathScale);
 
     this.ring.rotation.z += (this.look.spin + this.moodNow.spinAdd) * 0.5 * dt;
 

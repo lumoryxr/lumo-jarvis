@@ -29,12 +29,22 @@ export interface ProactivenessConfig {
   /** Quiet hours — no proposals surface in this window. Hours are local. */
   quietStart: number;   // 0..23
   quietEnd: number;     // 0..23 (must be != quietStart)
+  /** P0-S: per-trigger thresholds that the watcher engine reads. */
+  thresholds: {
+    /** Disk free ratio below this triggers the disk watcher (0..1). */
+    diskFreeBelow: number;
+    /** Metric sustained ratio above this triggers the metric watcher (0..1). */
+    metricAbove: number;
+  };
 }
 
 const PRESETS: Record<Exclude<Proactiveness, 'custom'>, ProactivenessConfig> = {
-  silent:    { dailyCap: 0,  cooldownMin: 0,   quietStart: 0, quietEnd: 0 },
-  companion: { dailyCap: 3,  cooldownMin: 90,  quietStart: 22, quietEnd: 8 },
-  chatty:    { dailyCap: 6,  cooldownMin: 45,  quietStart: 23, quietEnd: 7 },
+  silent:    { dailyCap: 0,  cooldownMin: 0,   quietStart: 0, quietEnd: 0,
+               thresholds: { diskFreeBelow: 0.05, metricAbove: 0.95 } },
+  companion: { dailyCap: 3,  cooldownMin: 90,  quietStart: 22, quietEnd: 8,
+               thresholds: { diskFreeBelow: 0.15, metricAbove: 0.88 } },
+  chatty:    { dailyCap: 6,  cooldownMin: 45,  quietStart: 23, quietEnd: 7,
+               thresholds: { diskFreeBelow: 0.20, metricAbove: 0.80 } },
 };
 
 export const DEFAULT_PROACTIVENESS: Proactiveness = 'companion';

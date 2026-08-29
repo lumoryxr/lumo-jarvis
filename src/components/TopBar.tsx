@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from '../state/session';
 import { useWindowMode } from '../state/windowMode';
+import { useProactiveness, inQuietHours } from '../state/proactiveness';
 import { openOnboardingAt, useIsOnboarded } from './OnboardingWizard';
 import './TopBar.css';
 
@@ -22,6 +23,15 @@ export function TopBar() {
   const setMode = useWindowMode((s) => s.setMode);
   const cycle = useWindowMode((s) => s.cycle);
   const onboarded = useIsOnboarded();
+  // P0-R: topbar shows a quiet-hours indicator so the user understands
+  // why she's not surfacing proposals right now.
+  const proactivenessConfig = useProactiveness((s) => s.config);
+  const [nowQuiet, setNowQuiet] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNowQuiet(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const quiet = inQuietHours(proactivenessConfig, nowQuiet.getHours());
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -107,6 +117,18 @@ export function TopBar() {
           >
             <span className="label">⌘,</span>
           </button>
+        )}
+        {onboarded && (
+          <span
+            className={`topbar__quiet ${quiet ? 'is-on' : ''}`}
+            title={quiet
+              ? `安静时段中 (${proactivenessConfig.quietStart}:00 - ${proactivenessConfig.quietEnd}:00) — 这段时间她不会主动开口`
+              : '现在允许她主动开口'}
+            aria-label="安静时段指示"
+          >
+            <span className="topbar__quiet-dot" aria-hidden />
+            <span className="label">{quiet ? '安静中' : '在线'}</span>
+          </span>
         )}
         <div className="topbar__clock">
           <span className="mono topbar__time">

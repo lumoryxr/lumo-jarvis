@@ -246,11 +246,31 @@
    The dot's colour tracks mood via inline style; emotion badge optional.
    ========================================================================== */
 
-.companion-min {
+.companion-min-wrap {
   position: fixed;
   right: 24px;
   bottom: 24px;
   z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  max-width: min(70vw, 360px);
+  /* Lift above the avatar so the whole row is clickable. */
+  padding: 6px 6px 6px 12px;
+  border-radius: 999px;
+  background: rgba(4, 10, 18, 0.45);
+  backdrop-filter: blur(6px);
+  animation: widget-rise 240ms var(--ease);
+}
+.companion-min-wrap:hover { background: rgba(120, 220, 255, 0.08); }
+
+.companion-min-preview-fade { display: none; }
+
+.companion-min {
+  position: relative;
+  flex: none;
   width: 64px;
   height: 64px;
   border: 1px solid var(--hairline-bright);
@@ -261,6 +281,7 @@
   display: grid;
   place-items: center;
   padding: 0;
+  flex: none;
   box-shadow:
     inset 0 1px 0 rgba(160, 230, 255, 0.10),
     0 12px 30px rgba(0, 0, 0, 0.55);
@@ -298,4 +319,17 @@
 @keyframes min-breath {
   0%, 100% { transform: scale(0.92); opacity: 0.85; }
   50%      { transform: scale(1.08); opacity: 1; }
+}
+
+/* P0-L: last-message preview beside the dot. */
+.companion-min__preview {
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.3;
+  max-width: 240px;
+  padding: 4px 10px 4px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: widget-rise 240ms var(--ease);
 }

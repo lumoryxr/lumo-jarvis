@@ -76,6 +76,8 @@ const STEPS = ['欢迎', '性格', '名字', '节奏', '完成'] as const;
 
 function StepWelcome() {
   const isSettings = useOnboarding((s) => s.completed);
+  const language = useOnboarding((s) => s.language);
+  const setLanguage = useOnboarding((s) => s.setLanguage);
   return (
     <section className="onb__step">
       <h1 id="onb-title" className="onb__h1">
@@ -93,6 +95,19 @@ function StepWelcome() {
         <li><span className="onb__bullet-tag">节奏</span> 她每天主动开口几次、什么时候安静。</li>
         <li><span className="onb__bullet-tag">{isSettings ? '清空' : '完成'}</span> {isSettings ? '一键清空记忆、活动、提议记录,然后回到默认。' : '之后随时可以从右上角回来调整。'}</li>
       </ul>
+
+      {/* P0-V: language picker on the welcome step. Affects the greeting line. */}
+      <div className="onb__lang">
+        <span className="onb__lang-label label">问候语言</span>
+        <button
+          className={`onb__lang-btn ${language === 'zh' ? 'is-on' : ''}`}
+          onClick={() => setLanguage('zh')}
+        >中文</button>
+        <button
+          className={`onb__lang-btn ${language === 'en' ? 'is-on' : ''}`}
+          onClick={() => setLanguage('en')}
+        >English</button>
+      </div>
       {isSettings && (
         <button
           className="onb__btn onb__btn--danger"

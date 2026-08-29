@@ -37,8 +37,10 @@ export interface Watcher {
   name: string;
   /** Time between checks in ms. */
   intervalMs: number;
-  /** Inspect the latest snapshot and return zero or more proposals. */
-  inspect: (snapshot: WatcherSnapshot) => Proposal[];
+  /** Inspect the latest snapshot and return zero or more proposals.
+   *  Receives the user-configurable thresholds (P0-S) so the watcher can
+   *  fire at the right sensitivity for this user. */
+  inspect: (snapshot: WatcherSnapshot, thresholds: { diskFreeBelow: number; metricAbove: number }) => Proposal[];
 }
 
 export interface WatcherSnapshot {
@@ -61,13 +63,13 @@ export const watcherMetric: Watcher = {
   id: 'metric.threshold',
   name: '指标阈值',
   intervalMs: 5_000,
-  inspect: (snap) => {
+  inspect: (snap, thresholds) => {
     const out: Proposal[] = [];
     for (const m of snap.metrics) {
       // Look at the last 6 samples to decide "sustained".
       const tail = m.history.slice(-6);
       if (tail.length < 4) continue;
-      const sustained = tail.filter((v) => v > 0.88).length >= 3;
+      const sustained = tail.filter((v) => v > thresholds.metricAbove).length >= 3;
       if (!sustained) continue;
       const trend: 'rising' | 'falling' | 'stable' =
         tail.at(-1)! > tail[0]! + 0.05 ? 'rising'
@@ -99,11 +101,11 @@ export const watcherDisk: Watcher = {
   id: 'disk.full',
   name: '磁盘空间',
   intervalMs: 60_000,
-  inspect: (snap) => {
+  inspect: (snap, thresholds) => {
     const out: Proposal[] = [];
     for (const d of snap.disks) {
       const ratio = d.freeGB / d.totalGB;
-      if (ratio > 0.15) continue;
+      if (ratio > thresholds.diskFreeBelow) continue;
       out.push({
         id: `disk.${d.mount}.${Date.now()}`,
         trigger: 'metric_anomaly',
@@ -129,7 +131,7 @@ export const watcherProcess: Watcher = {
   id: 'process.hog',
   name: '进程占用',
   intervalMs: 30_000,
-  inspect: (snap) => {
+  inspect: (snap, _thresholds) => {
     const out: Proposal[] = [];
     for (const p of snap.processes) {
       if (p.cpu < 0.85) continue;
@@ -161,7 +163,7 @@ export const watcherCI: Watcher = {
   id: 'ci.failure',
   name: 'CI 失败',
   intervalMs: 30_000,
-  inspect: (snap) => {
+  inspect: (snap, _thresholds) => {
     return snap.ci
       .filter((c) => c.status === 'failure')
       .map((c) => ({
@@ -187,7 +189,7 @@ export const watcherTime: Watcher = {
   id: 'time.greeter',
   name: '时段问候',
   intervalMs: 60_000,
-  inspect: (snap) => {
+  inspect: (snap, _thresholds) => {
     const h = new Date(snap.now).getHours();
     const wd = new Date(snap.now).getDay();
     const out: Proposal[] = [];
@@ -233,11 +235,15 @@ export const DEFAULT_WATCHERS: Watcher[] = [
  * The caller (MockBackend) then consults `Proactiveness.mayFire()` before
  * emitting each one as a Provider event.
  */
-export function runWatchers(snap: WatcherSnapshot, watchers: Watcher[] = DEFAULT_WATCHERS): Proposal[] {
+export function runWatchers(
+  snap: WatcherSnapshot,
+  watchers: Watcher[] = DEFAULT_WATCHERS,
+  thresholds: { diskFreeBelow: number; metricAbove: number } = { diskFreeBelow: 0.15, metricAbove: 0.88 },
+): Proposal[] {
   const out: Proposal[] = [];
   for (const w of watchers) {
     try {
-      out.push(...w.inspect(snap));
+      out.push(...w.inspect(snap, thresholds));
     } catch (err) {
       // Watchers must not crash the host. Log + continue.
       // eslint-disable-next-line no-console

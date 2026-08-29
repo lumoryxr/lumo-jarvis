@@ -131,6 +131,9 @@ export const useSession = create<SessionState>((set) => ({
             tasks[i] = event.task;
             // Activity fire only on *transition* (avoid spam on every tick).
             if (prev.status !== event.task.status && (event.task.status === 'done' || event.task.status === 'failed')) {
+              // P0-T: avatar reacts to outcomes.
+              if (event.task.status === 'done')  usePersona.getState().pushEmotion('happy', 0.7, 'task done');
+              if (event.task.status === 'failed') usePersona.getState().pushEmotion('sad',   0.6, 'task failed');
               recordActivity({
                 kind: event.task.status === 'done' ? 'task_completed' : 'task_failed',
                 title: event.task.status === 'done' ? `完成：${event.task.title}` : `失败：${event.task.title}`,
@@ -176,6 +179,17 @@ export const useSession = create<SessionState>((set) => ({
           break;
         case 'persona':
           usePersona.getState().setPersona(event.preset, event.name);
+          break;
+        case 'message.memoryRefs':
+          // P0-M: tag the message with the memory ids it surfaced, so the
+          // chat UI can show "she used 3 things she remembered".
+          set((s) => ({
+            messages: s.messages.map((m) =>
+              m.id === event.messageId
+                ? { ...m, memoryRefs: [...(m.memoryRefs ?? []), ...event.ids] }
+                : m,
+            ),
+          }));
           break;
       }
     });
@@ -245,5 +259,10 @@ export function buildBriefing(tasks: Task[]): Briefing {
 
   return { generatedAt: Date.now(), headline, counts, needsAttention, highlights };
 }
+
+/* --------------------------------------------------------------- conversation export (P0-U) */
+/* Inlined into Conversation.tsx to avoid template-literal escape issues in
+ * this already-large module. The download helper there imports nothing from
+ * here; everything the exporter needs is in the component. */
 
 export { provider };

@@ -480,3 +480,29 @@ kbd {
   background: rgba(255, 77, 141, 0.12);
   color: var(--magenta);
 }
+
+/* P0-V: language picker */
+.onb__lang {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.onb__lang-label { color: var(--ink-dim); }
+.onb__lang-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.onb__lang-btn:hover { background: rgba(120, 220, 255, 0.08); color: var(--cyan-soft); }
+.onb__lang-btn.is-on {
+  background: rgba(53, 232, 255, 0.18);
+  color: var(--cyan);
+  border-color: var(--hairline-bright);
+}
