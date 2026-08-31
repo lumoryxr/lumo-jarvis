@@ -27,7 +27,8 @@ export type ActivityKind =
   | 'proposal_dismissed'
   | 'task_completed'
   | 'task_failed'
-  | 'memory_decayed';
+  | 'memory_decayed'
+  | 'note';
 
 export interface ActivityEntry {
   id: string;

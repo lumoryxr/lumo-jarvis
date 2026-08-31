@@ -31,7 +31,21 @@ export interface ToolCall {
   /** Truncated stdout / result preview. */
   output?: string;
   durationMs?: number;
+  /** P1-B: rich rendering hint. ToolCallRenderer in Conversation.tsx
+   *  uses this to decide which inner renderer to show. */
+  kind?: 'text' | 'code' | 'diff' | 'table' | 'chart' | 'log' | 'markdown';
+  /** P1-B: structured payload for table/chart/code/diff/log. */
+  payload?: ToolPayload;
 }
+
+export type ToolPayload =
+  | { kind: 'code'; language: string; code: string }
+  | { kind: 'diff'; before: string; after: string; filename?: string }
+  | { kind: 'table'; columns: string[]; rows: (string | number | null)[][]; caption?: string }
+  | { kind: 'chart'; chart: 'bar' | 'line'; series: { label: string; values: number[] }[]; xLabels: string[] }
+  | { kind: 'log'; entries: { level: 'info' | 'warn' | 'error'; message: string; ts?: number }[] }
+  | { kind: 'markdown'; text: string }
+  | { kind: 'text'; text: string };
 
 export interface Message {
   id: string;
@@ -83,6 +97,12 @@ export interface Task {
   /** Free-form grouping, e.g. a repo name or project code. */
   project?: string;
   tags: string[];
+  /** P1-C: user-applied free-form labels (separate from tags). */
+  labels: string[];
+  /** P1-C: priority lane (P0 highest, P2 lowest). Default P1. */
+  priority: 0 | 1 | 2;
+  /** P1-C: stable order within the priority lane. Lower = earlier. */
+  order: number;
   steps: TaskStep[];
   /** Provider-native handle: a Hermes `run_id`, a local job id, ... */
   externalId?: string;
@@ -117,13 +137,19 @@ export interface MachineSnapshot {
 
 export type ConnectorId = 'hermes' | 'os' | 'voice' | 'llm';
 
+export type ConnectorMode = 'online' | 'degraded' | 'offline';
+
 export interface ConnectorStatus {
   id: ConnectorId;
   label: string;
   online: boolean;
+  /** P1-E: explicit tri-state status. Defaults to 'online' when online=true. */
+  status?: ConnectorMode;
   /** Short detail line, e.g. `127.0.0.1:8642` or `mock`. */
   detail: string;
   latencyMs?: number;
+  /** P1-E: epoch ms of the last status change / sync. */
+  lastSyncAt?: number;
 }
 
 /* ------------------------------------------------------------------ brief */
@@ -218,7 +244,7 @@ export interface Proposal {
   id: string;
   /** Where it came from — so the user can audit the trigger. */
   trigger: 'morning' | 'idle' | 'task_done' | 'review_due' | 'metric_anomaly'
-         | 'inspiration' | 'anniversary' | 'playful';
+         | 'inspiration' | 'anniversary' | 'playful' | 'scheduled';
   reasoning: string;
   /** The task she would start if approved. */
   suggestedTask?: TaskDraft;
@@ -227,6 +253,9 @@ export interface Proposal {
   expiresAt: number;
   /** Optional tone — affects how she presents it. */
   tone?: 'matter_of_fact' | 'warm' | 'playful' | 'concerned';
+  /** P1-J: if set, the proposal is queued and only surfaces on/after
+   *  this timestamp. countDown gives a friendly "in 14m" indicator. */
+  dueAt?: number;
 }
 
 export interface TaskDraft {

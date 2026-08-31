@@ -12,9 +12,10 @@ const TRIGGER_LABEL: Record<Proposal['trigger'], string> = {
   review_due: '需要你拍板',
   metric_anomaly: '异常告警',
   inspiration: '灵感',
-  anniversary: '纪念日',
-  playful: '小调皮',
-};
+    anniversary: '纪念日',
+    playful: '小调皮',
+    scheduled: '稍后再说',
+  };
 
 const TONE_TINT: Record<NonNullable<Proposal['tone']>, string> = {
   matter_of_fact: 'var(--cyan)',
@@ -190,6 +191,9 @@ export function ProactivenessPanel() {
         </div>
       )}
 
+      {/* P1-M: 24h trigger activation heatmap. */}
+      <TriggerHeatmap />
+
       {/* --- active proposals ------------------------------------------ */}
       <ul className="props__list">
         {proposals.length === 0 ? (
@@ -244,4 +248,44 @@ const BAND_HINT: Record<Proactiveness, string> = {
   companion: '每天最多 3 次主动提议;22:00–8:00 安静。',
   chatty: '每天最多 6 次主动提议;23:00–7:00 安静。',
   custom: '自己定上限、冷却、安静时段、每类开关。',
-};
+  };
+
+  function TriggerHeatmap() {
+  const triggerHistory = useProactiveness((s) => s.triggerHistory);
+  const triggers = Object.keys(triggerHistory) as Array<keyof typeof triggerHistory>;
+  const now = Date.now();
+  const HOURS = 24;
+  const buckets: Record<string, number[]> = {};
+  triggers.forEach((t) => {
+    const cells: number[] = Array.from({ length: HOURS }, () => 0);
+    for (const fire of triggerHistory[t]) {
+      const hourIdx = Math.floor((now - fire) / (60 * 60 * 1000));
+      if (hourIdx >= 0 && hourIdx < HOURS) cells[HOURS - 1 - hourIdx] += 1;
+    }
+    buckets[t] = cells;
+  });
+  const max = Math.max(0, ...Object.values(buckets).flatMap((c) => c));
+  return (
+    <div className="props__heat">
+      <div className="label">past 24h triggers</div>
+      <div className="props__heat-grid">
+        {triggers.map((t) => (
+          <div key={t} className="props__heat-row">
+            <span className="mono props__heat-label">{TRIGGER_LABEL[t as Proposal['trigger']]}</span>
+            <div className="props__heat-cells">
+              {buckets[t].map((v, i) => (
+                <span
+                  key={i}
+                  className="props__heat-cell"
+                  data-active={v > 0 ? '1' : '0'}
+                  data-heat={v > 0 ? Math.max(1, Math.round((v / Math.max(1, max)) * 3)) : 0}
+                  title={`${HOURS - 1 - i}h ago: ${v}`}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

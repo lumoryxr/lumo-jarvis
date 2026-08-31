@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { TopBar } from './components/TopBar';
 import { SystemRail } from './components/SystemRail';
 import { AvatarStage } from './components/AvatarStage';
@@ -9,6 +9,7 @@ import { CompanionWidget } from './components/CompanionWidget';
 import { MemoryConsole } from './components/MemoryConsole';
 import OnboardingWizard, { useIsOnboarded, openOnboardingAt } from './components/OnboardingWizard';
 import { ActivityPanel, toggleActivityPanel } from './components/ActivityPanel';
+import { ConnectorsModal } from './components/ConnectorsModal';
 import { useOnboarding } from './state/onboarding';
 import { useSession, provider } from './state/session';
 import { useWindowMode, installWindowModeHotkeys } from './state/windowMode';
@@ -25,21 +26,27 @@ import './App.css';
  * P0-E: `OnboardingWizard` blocks the rest of the UI until the user has
  * walked through the five-step config. Once committed, it never shows
  * again unless reopened from the TopBar (`reconfigure`).
+ *
+ * P1-E: ConnectorsModal opens via Cmd+. — a single page covering every
+ * connector's status, latency, last events, and manual override buttons.
  */
 export default function App() {
   const boot = useSession((s) => s.boot);
   const mode = useWindowMode((s) => s.mode);
   const onboarded = useIsOnboarded();
+  const [connectorsOpen, setConnectorsOpen] = useState(false);
 
   useEffect(() => { boot(); }, [boot]);
   useEffect(() => installWindowModeHotkeys(), []);
-  // Cmd+, opens the wizard back to step 0 (reconfigure).
-  // Cmd+M opens the activity panel (P0-J).
+
+  // Cmd+, → wizard reconfigure. Cmd+M → activity panel.
+  // Cmd+. → connector page (P1-E).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && !e.altKey) {
         if (e.key === ',' && !e.shiftKey) { e.preventDefault(); openOnboardingAt(0); return; }
         if (e.key.toLowerCase() === 'm' && !e.shiftKey) { e.preventDefault(); toggleActivityPanel(); return; }
+        if (e.key === '.' && !e.shiftKey) { e.preventDefault(); setConnectorsOpen((v) => !v); return; }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -86,6 +93,7 @@ export default function App() {
       <CompanionWidget />
       <MemoryConsole />
       <ActivityPanel />
+      <ConnectorsModal open={connectorsOpen} onClose={() => setConnectorsOpen(false)} />
     </div>
   );
 }

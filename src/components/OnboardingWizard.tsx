@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useOnboarding, PRESET_CATALOGUE, VOICE_CATALOGUE } from '../state/onboarding';
-import { type Proactiveness } from '../state/proactiveness';
 import { usePersona } from '../state/persona';
+import { type Proactiveness } from '../state/proactiveness';
 import { useActivity } from '../state/activity';
 import './OnboardingWizard.css';
 
@@ -74,6 +74,37 @@ const STEPS = ['欢迎', '性格', '名字', '节奏', '完成'] as const;
 
 /* ---------------------------------------------- step: welcome */
 
+function PersonaTunables() {
+  const tunables = usePersona((s) => s.tunables);
+  const setTunable = usePersona((s) => s.setTunable);
+  const SLIDERS: { key: 'openness' | 'playfulness' | 'directness'; label: string; left: string; right: string }[] = [
+    { key: 'openness',    label: '开放度', left: '惜字如金', right: '见啥说啥' },
+    { key: 'playfulness', label: '俏皮度', left: '一本正经', right: '爱开玩笑' },
+    { key: 'directness',  label: '直白度', left: '委婉',     right: '直说' },
+  ];
+  return (
+    <div className="onb__tunables">
+      <div className="onb__tunables-title label">微调她的人格</div>
+      {SLIDERS.map((s) => (
+        <div key={s.key} className="onb__tunable">
+          <span className="onb__tunable-label">{s.label}</span>
+          <span className="onb__tunable-end">{s.left}</span>
+          <input
+            type="range"
+            min={-1} max={1} step={0.05}
+            value={tunables[s.key]}
+            onChange={(e) => setTunable(s.key, Number(e.target.value))}
+          />
+          <span className="onb__tunable-end">{s.right}</span>
+          <span className="mono onb__tunable-val">
+            {tunables[s.key] === 0 ? '0' : (tunables[s.key] > 0 ? '+' : '') + tunables[s.key].toFixed(2)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StepWelcome() {
   const isSettings = useOnboarding((s) => s.completed);
   const language = useOnboarding((s) => s.language);
@@ -106,9 +137,14 @@ function StepWelcome() {
         <button
           className={`onb__lang-btn ${language === 'en' ? 'is-on' : ''}`}
           onClick={() => setLanguage('en')}
-        >English</button>
-      </div>
-      {isSettings && (
+                  >English</button>
+                </div>
+
+                {/* P1-G: persona tunables. Shown only in settings mode (reconfigure).
+                    The fresh wizard accepts the baseline; tweaking happens later. */}
+                {isSettings && <PersonaTunables />}
+
+                {isSettings && (
         <button
           className="onb__btn onb__btn--danger"
           onClick={() => {

@@ -4,6 +4,59 @@ import type {
 } from '../core/types';
 import * as memoryStore from '../services/memory';
 
+/* ---------------------------------------------------------- persistence (P1-D) */
+
+/** LocalStorage shape for the persona's emotional state. Versioned so we
+ *  can evolve the schema without losing existing users. */
+const PERSIST_KEY = 'lumo.persona.v1';
+const PERSIST_VERSION = 1;
+interface PersistedPersona {
+  version: number;
+  mood: Mood;
+  emotion: Emotion;
+  emotionIntensity: number;
+  savedAt: number;
+}
+
+function readBlob(): PersistedPersona | null {
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || obj.version !== PERSIST_VERSION) return null;
+    if (!obj.mood || typeof obj.mood.valence !== 'number') return null;
+    return obj as PersistedPersona;
+  } catch {
+    return null;
+  }
+}
+
+function writeBlob(partial: Pick<PersistedPersona, 'mood' | 'emotion' | 'emotionIntensity'>) {
+  try {
+    const blob: PersistedPersona = {
+      version: PERSIST_VERSION,
+      savedAt: Date.now(),
+      ...partial,
+    };
+    localStorage.setItem(PERSIST_KEY, JSON.stringify(blob));
+  } catch {
+    /* private mode / quota — fail silently. */
+  }
+}
+
+function hydrateMood(): Mood | null {
+  const b = readBlob();
+  // Stale protection: a mood snapshot older than 7 days gets discarded
+  // so we don't render an old "tired of you" mood at the next session.
+  if (!b || Date.now() - b.savedAt > 7 * 24 * 3600 * 1000) return null;
+  return b.mood;
+}
+function hydrateEmotion(): Emotion | null {
+  const b = readBlob();
+  if (!b || Date.now() - b.savedAt > 7 * 24 * 3600 * 1000) return null;
+  return b.emotion;
+}
+
 /**
  * Companion-persona store.
  *
@@ -62,6 +115,11 @@ interface PersonaState {
   /** Whether the proactive-suggestion layer is enabled (default on). */
   proactiveness: 'silent' | 'companion' | 'chatty' | 'custom';
 
+  /* -- P1-G: persona tunables --------------------------------------- */
+  /** How freely she volunteers extra context. -1 sparse, +1 chatty. */
+  tunables: { openness: number; playfulness: number; directness: number };
+  setTunable: (key: 'openness' | 'playfulness' | 'directness', value: number) => void;
+
   /* -- setters driven by ProviderEvents ---------------------------------- */
   setPersona: (preset: PersonaPreset, name: string) => void;
   pushMood: (mood: Mood) => void;
@@ -82,11 +140,14 @@ const MEMORY_DECAY_PER_DAY = 0.04;
 const MAX_MEMORIES = 60;
 const MAX_PROPOSALS = 12;
 
-export const usePersona = create<PersonaState>((set) => ({
+export const usePersona = create<PersonaState>((set, get) => ({
   preset: DEFAULT_PRESET,
   name: DEFAULT_NAME,
-  mood: { ...PERSONA_BASELINE[DEFAULT_PRESET] },
-  emotion: 'neutral',
+  // P1-D: hydrate mood + last emotion from disk so the avatar greets you
+  // the way you left her, not the way she starts. Falls back to the
+  // preset baseline on first run.
+  mood: hydrateMood() ?? { ...PERSONA_BASELINE[DEFAULT_PRESET] },
+  emotion: hydrateEmotion() ?? 'neutral',
   emotionIntensity: 0.3,
   lastAction: undefined,
   // P0-C: hydrate from persistent storage on boot so memories survive reloads.
@@ -94,13 +155,31 @@ export const usePersona = create<PersonaState>((set) => ({
   proposals: [],
   proactiveness: 'companion',
 
+  // P1-G: persona tunables — adjusted in the settings wizard.
+  tunables: { openness: 0, playfulness: 0, directness: 0 },
+
   setPersona: (preset, name) =>
     set({ preset, name, mood: { ...PERSONA_BASELINE[preset] } }),
 
-  pushMood: (mood) => set({ mood }),
+  pushMood: (mood) => {
+    set({ mood });
+    // P1-D: persist on every mood update so the avatar greets you the
+    // way you left her. Throttled by the OS writing one localStorage entry.
+    writeBlob({
+      mood,
+      emotion: get().emotion,
+      emotionIntensity: get().emotionIntensity,
+    });
+  },
 
-  pushEmotion: (emotion, intensity, trigger) =>
-    set({ emotion, emotionIntensity: intensity, emotionTrigger: trigger }),
+  pushEmotion: (emotion, intensity, trigger) => {
+    set({ emotion, emotionIntensity: intensity, emotionTrigger: trigger });
+    writeBlob({
+      mood: get().mood,
+      emotion,
+      emotionIntensity: intensity,
+    });
+  },
 
   pushAction: (action) => {
     set({ lastAction: action });
@@ -147,6 +226,11 @@ export const usePersona = create<PersonaState>((set) => ({
   },
 
   setProactiveness: (proactiveness) => set({ proactiveness }),
+
+  setTunable: (key, value) => {
+    const clamped = Math.max(-1, Math.min(1, value));
+    set((s) => ({ tunables: { ...s.tunables, [key]: clamped } }));
+  },
 }));
 
 /* ------------------------------------------------------------------ hooks */

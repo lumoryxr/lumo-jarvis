@@ -131,3 +131,16 @@
   gap: 10px;
 }
 .topbar__time { font-size: 14px; letter-spacing: 0.06em; color: var(--ink); }
+.topbar__theme {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 1px 5px;
+  margin-right: 8px;
+  cursor: pointer;
+  outline: none;
+}
+.topbar__theme:hover { color: var(--cyan-soft); border-color: var(--hairline-bright); }

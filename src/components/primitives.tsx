@@ -72,12 +72,54 @@ export function StatusChip({ status, children }: { status: string; children: Rea
 }
 
 /** Thin progress bar with a travelling sheen while active. */
-export function Progress({ value, active, tone = 'running' }: { value: number; active?: boolean; tone?: string }) {
+/** P1-F: enhanced progress bar.
+ *  - Renders the bar as before.
+ *  - Shows elapsed time + ETA below the bar.
+ *  - If `subSteps` is provided, renders mini-pip indicators per step. */
+export function Progress({ value, active, tone = 'running', startedAt, subSteps }: {
+  value: number;
+  active?: boolean;
+  tone?: string;
+  /** Epoch ms when the task started. Used to compute elapsed and ETA. */
+  startedAt?: number;
+  /** Optional step breakdown (status per step). */
+  subSteps?: { id: string; status: import('../core/types').TaskStatus }[];
+}) {
+  const elapsedMs = startedAt ? Date.now() - startedAt : 0;
+  const etaMs = value > 0 && value < 1 ? Math.round((elapsedMs / value) * (1 - value)) : 0;
+  const showEta = active && elapsedMs > 4000 && etaMs > 1000;
   return (
-    <div className="progress" style={{ ['--bar' as string]: `var(--st-${tone})` }}>
-      <div className="progress__fill" style={{ width: `${Math.round(value * 100)}%` }}>
-        {active && <span className="progress__sheen" />}
+    <div className="progress-wrap">
+      <div className="progress" style={{ ['--bar' as string]: `var(--st-${tone})` }}>
+        <div className="progress__fill" style={{ width: `${Math.round(value * 100)}%` }}>
+          {active && <span className="progress__sheen" />}
+        </div>
       </div>
+      {(showEta || subSteps) && (
+        <div className="progress__meta">
+          {subSteps && subSteps.length > 0 && (
+            <span className="progress__steps">
+              {subSteps.map((s) => (
+                <span key={s.id} className={`progress__pip progress__pip--${s.status}`} title={s.status} />
+              ))}
+            </span>
+          )}
+          {showEta && (
+            <span className="progress__eta mono">~{formatDuration(etaMs)}</span>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+/** Compact duration formatter (e.g. `2m 14s`, `1h 6m`). */
+function formatDuration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  if (m < 60) return `${m}m ${sec}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
 }

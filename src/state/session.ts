@@ -9,6 +9,10 @@ import { usePersona, startMemoryDecay } from './persona';
 import { useProactiveness, startProactivenessDailyReset } from './proactiveness';
 import { recordActivity } from './activity';
 
+/** P1-A: tiny id generator — local copy so we don't pull the whole mock
+ *  module into the store file (it would also drag in the rest of the mock). */
+function uid() { return Math.random().toString(36).slice(2, 10); }
+
 /**
  * Single source of truth for the whole window.
  *
@@ -40,7 +44,7 @@ interface SessionState {
   messages: Message[];
   tasks: Task[];
   machine: MachineSnapshot | null;
-  connectors: Record<ConnectorId, ConnectorStatus | undefined>;
+  connectors: Record<ConnectorId, ConnectorStatus>;
   selectedTaskId: string | null;
   /** 0..1, drives avatar displacement while speaking. */
   amplitude: number;
@@ -48,10 +52,20 @@ interface SessionState {
   boot: () => void;
   send: (text: string) => void;
   setAgentState: (s: AgentState) => void;
-  setAmplitude: (a: number) => void;
+  setAmplitude: (amp: number) => void;
+  /** Append a system-role message to the transcript (no provider round-trip). */
+  pushSystem: (text: string) => void;
   selectTask: (id: string | null) => void;
   cancelTask: (id: string) => void;
   retryTask: (id: string) => void;
+  /** P1-C: reorder a task within its priority lane (drop above/below). */
+  moveTask: (id: string, toIndex: number) => void;
+  /** P1-C: bump a task to a priority lane. */
+  setPriority: (id: string, priority: 0 | 1 | 2) => void;
+  /** P1-C: add or remove a free-form label. */
+  toggleLabel: (id: string, label: string) => void;
+  /** P1-E: mark a connector as online/degraded/offline manually. */
+  setConnectorStatus: (id: ConnectorId, status: import('../core/types').ConnectorMode) => void;
 }
 
 export const useSession = create<SessionState>((set) => ({
@@ -66,7 +80,7 @@ export const useSession = create<SessionState>((set) => ({
   ],
   tasks: [],
   machine: null,
-  connectors: {} as Record<ConnectorId, ConnectorStatus | undefined>,
+  connectors: {} as Record<ConnectorId, ConnectorStatus>,
   selectedTaskId: null,
   amplitude: 0,
 
@@ -217,9 +231,57 @@ export const useSession = create<SessionState>((set) => ({
 
   setAgentState: (agentState) => set({ agentState }),
   setAmplitude: (amplitude) => set({ amplitude }),
+  /** Append a system-role message to the transcript (no provider round-trip). */
+  pushSystem: (text) => {
+    const id = uid();
+    set((s) => ({
+      messages: [...s.messages, {
+        id,
+        speaker: 'system',
+        text,
+        at: Date.now(),
+      }],
+    }));
+    recordActivity({ kind: 'note', title: text });
+  },
   selectTask: (selectedTaskId) => set({ selectedTaskId }),
   cancelTask: (id) => void provider.cancelTask(id),
   retryTask: (id) => void provider.retryTask(id),
+  moveTask: (id, toIndex) => {
+    set((s) => {
+      const tasks = [...s.tasks];
+      const from = tasks.findIndex((t) => t.id === id);
+      if (from === -1) return {};
+      const [moved] = tasks.splice(from, 1);
+      const adjusted = Math.max(0, Math.min(toIndex, tasks.length));
+      tasks.splice(adjusted, 0, moved);
+      // Renormalise `order` so the visible sequence matches array order.
+      const renorm = tasks.map((t, i) => ({ ...t, order: i }));
+      return { tasks: renorm };
+    });
+  },
+  setPriority: (id, priority) => {
+    set((s) => ({
+      tasks: s.tasks.map((t) => t.id === id ? { ...t, priority } : t),
+    }));
+  },
+  toggleLabel: (id, label) => {
+    set((s) => ({
+      tasks: s.tasks.map((t) => {
+        if (t.id !== id) return t;
+        const has = t.labels.includes(label);
+        return { ...t, labels: has ? t.labels.filter((l) => l !== label) : [...t.labels, label] };
+      }),
+    }));
+  },
+  setConnectorStatus: (id, status) => {
+      set((s) => ({
+        connectors: {
+          ...s.connectors,
+          [id]: { ...(s.connectors[id] ?? { id, label: id.toUpperCase(), online: status === 'online', detail: '' }), status, lastSyncAt: Date.now() },
+        },
+      }));
+    },
 }));
 
 /* --------------------------------------------------------------- briefing */

@@ -506,3 +506,25 @@ kbd {
   color: var(--cyan);
   border-color: var(--hairline-bright);
 }
+
+/* P1-G: persona tunables. */
+.onb__tunables {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.onb__tunables-title { color: var(--ink-dim); margin-bottom: 2px; }
+.onb__tunable {
+  display: grid;
+  grid-template-columns: 50px 80px 1fr 80px 36px;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+.onb__tunable-label { color: var(--ink); font-weight: 500; }
+.onb__tunable-end { color: var(--ink-faint); font-size: 10px; text-align: center; }
+.onb__tunable input[type="range"] { width: 100%; accent-color: var(--cyan); }
+.onb__tunable-val { color: var(--cyan-soft); font-size: 10px; text-align: right; }

@@ -10,6 +10,7 @@ const KIND_LABEL: Record<ActivityKind, string> = {
   task_completed:     '完成',
   task_failed:        '失败',
   memory_decayed:     '记忆衰减',
+  note:               '笔记',
 };
 
 const KIND_TINT: Record<ActivityKind, string> = {
@@ -20,6 +21,7 @@ const KIND_TINT: Record<ActivityKind, string> = {
   task_completed:     'var(--lime)',
   task_failed:        'var(--magenta)',
   memory_decayed:     'var(--ink-faint)',
+  note:               'var(--ink-dim)',
 };
 
 const KIND_GLYPH: Record<ActivityKind, string> = {
@@ -30,6 +32,7 @@ const KIND_GLYPH: Record<ActivityKind, string> = {
   task_completed:     '◆',
   task_failed:        '◉',
   memory_decayed:     '○',
+  note:               '·',
 };
 
 /**

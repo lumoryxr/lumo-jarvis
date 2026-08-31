@@ -3,6 +3,7 @@ import { useSession } from '../state/session';
 import { useWindowMode } from '../state/windowMode';
 import { useProactiveness, inQuietHours } from '../state/proactiveness';
 import { openOnboardingAt, useIsOnboarded } from './OnboardingWizard';
+import { applyTheme, readTheme, THEME_LABEL, type Theme } from '../state/theme';
 import './TopBar.css';
 
 /**
@@ -26,6 +27,10 @@ export function TopBar() {
   // P0-R: topbar shows a quiet-hours indicator so the user understands
   // why she's not surfacing proposals right now.
   const proactivenessConfig = useProactiveness((s) => s.config);
+  // P1-N: theme picker. Reads the persisted theme on mount and exposes
+  // a small dropdown next to the quiet-hours pill.
+  const [theme, setTheme] = useState<Theme>(() => readTheme());
+  useEffect(() => { applyTheme(theme); }, [theme]);
   const [nowQuiet, setNowQuiet] = useState(() => new Date());
   useEffect(() => {
     const id = setInterval(() => setNowQuiet(new Date()), 60_000);
@@ -131,6 +136,17 @@ export function TopBar() {
           </span>
         )}
         <div className="topbar__clock">
+          <select
+            className="topbar__theme"
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as Theme)}
+            title="外观主题"
+            aria-label="外观主题"
+          >
+            {(['default', 'warm', 'cool', 'glass'] as Theme[]).map((t) => (
+              <option key={t} value={t}>{THEME_LABEL[t]}</option>
+            ))}
+          </select>
           <span className="mono topbar__time">
             {now.toLocaleTimeString('zh-CN', { hour12: false })}
           </span>

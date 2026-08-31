@@ -66,8 +66,10 @@ interface ProactivenessState {
   triggerEnabled: Record<Proposal['trigger'], boolean>;
   /** Rolling 24h counter — capped to `dailyCap`. */
   firedToday: number;
-  /** Map of trigger → timestamp of last fire (ms epoch). */
-  lastFired: Record<Proposal['trigger'], number>;
+  /** P1-M: ring buffer of fire times per trigger (capped at 64 each). */
+  triggerHistory: Record<Proposal['trigger'], number[]>;
+    /** Map of trigger → timestamp of last fire (ms epoch). */
+    lastFired: Record<Proposal['trigger'], number>;
   /** Whether a watcher currently wants to surface something (pending review). */
   pendingProposal?: Proposal;
 
@@ -78,6 +80,8 @@ interface ProactivenessState {
   mayFire: (trigger: Proposal['trigger']) => boolean;
   /** Mark a proposal as fired — call *after* the provider emits it. */
   recordFire: (trigger: Proposal['trigger']) => void;
+  getRecentFires: (trigger: Proposal['trigger'], windowMs: number) => number;
+  resetHistory: () => void;
 }
 
 const ALL_TRIGGERS: Proposal['trigger'][] = [
@@ -93,6 +97,7 @@ export const useProactiveness = create<ProactivenessState>((set, get) => ({
   config: { ...PRESETS[DEFAULT_PROACTIVENESS] },
   triggerEnabled: { ...DEFAULT_TRIGGERS },
   firedToday: 0,
+  triggerHistory: { morning: [], idle: [], task_done: [], review_due: [], metric_anomaly: [], inspiration: [], anniversary: [], playful: [], scheduled: [] },
   lastFired: Object.fromEntries(ALL_TRIGGERS.map((t) => [t, 0])) as Record<Proposal['trigger'], number>,
 
   setBand: (band) =>
@@ -125,11 +130,24 @@ export const useProactiveness = create<ProactivenessState>((set, get) => ({
     return true;
   },
 
-  recordFire: (trigger) =>
-    set((s) => ({
-      firedToday: s.firedToday + 1,
-      lastFired: { ...s.lastFired, [trigger]: Date.now() },
-    })),
+  recordFire: (trigger) => {
+    const now = Date.now();
+    set((s) => {
+      const prev = s.triggerHistory[trigger] ?? [];
+      const trimmed = prev.length > 64 ? prev.slice(-63) : prev;
+      return {
+        firedToday: s.firedToday + 1,
+        lastFired: { ...s.lastFired, [trigger]: now },
+        triggerHistory: { ...s.triggerHistory, [trigger]: [...trimmed, now] },
+      };
+    });
+  },
+  getRecentFires: (trigger, windowMs) => {
+    const s = get();
+    const cutoff = Date.now() - windowMs;
+    return (s.triggerHistory[trigger] ?? []).filter((t) => t >= cutoff).length;
+  },
+  resetHistory: () => set({ triggerHistory: { morning: [], idle: [], task_done: [], review_due: [], metric_anomaly: [], inspiration: [], anniversary: [], playful: [], scheduled: [] } }),
 }));
 
 /**
@@ -142,6 +160,7 @@ export function startProactivenessDailyReset() {
     const now = new Date();
     if (now.getHours() === 0 && now.getMinutes() < 15) {
       useProactiveness.setState({ firedToday: 0 });
+      useProactiveness.getState().resetHistory();
     }
   };
   const id = setInterval(tick, 15 * 60 * 1000);

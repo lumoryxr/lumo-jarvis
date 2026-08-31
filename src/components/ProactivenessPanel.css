@@ -238,4 +238,18 @@
 }
 .props__btn.is-primary:hover {
   background: rgba(255, 179, 71, 0.26);
+}.props__heat { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--hairline); display: flex; flex-direction: column; gap: 5px; }
+.props__heat .label { color: var(--ink-dim); }
+.props__heat-grid { display: flex; flex-direction: column; gap: 3px; }
+.props__heat-row { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 6px; }
+.props__heat-label { font-size: 9px; color: var(--ink-dim); letter-spacing: 0.16em; }
+.props__heat-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 1px; }
+.props__heat-cell {
+  height: 8px;
+  border-radius: 1px;
+  background: rgba(120, 220, 255, 0.05);
+  transition: background var(--fast) var(--ease);
 }
+.props__heat-cell[data-active="1"][data-heat="1"] { background: rgba(53, 232, 255, 0.35); }
+.props__heat-cell[data-active="1"][data-heat="2"] { background: rgba(53, 232, 255, 0.65); }
+.props__heat-cell[data-active="1"][data-heat="3"] { background: rgba(53, 232, 255, 1); box-shadow: 0 0 4px rgba(53, 232, 255, 0.5); }

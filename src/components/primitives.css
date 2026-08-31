@@ -99,3 +99,28 @@
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
   animation: sweep 1.9s var(--ease) infinite;
 }
+
+/* P1-F: enhanced progress with sub-step pips + ETA. */
+.progress-wrap { display: flex; flex-direction: column; gap: 4px; }
+.progress__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9px;
+}
+.progress__steps { display: inline-flex; gap: 3px; }
+.progress__pip {
+  width: 8px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hairline);
+}
+.progress__pip--done      { background: var(--lime); }
+.progress__pip--running   { background: var(--cyan); animation: pulse 1.4s var(--ease) infinite; }
+.progress__pip--failed    { background: var(--magenta); }
+.progress__pip--skipped   { background: var(--ink-faint); }
+.progress__pip--review    { background: var(--gold); }
+.progress__pip--cancelled { background: var(--ink-faint); opacity: 0.4; }
+.progress__pip--blocked   { background: var(--gold); opacity: 0.6; }
+.progress__eta { color: var(--ink-faint); }

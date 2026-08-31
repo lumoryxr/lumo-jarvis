@@ -47,7 +47,7 @@ const PROC_NAMES = ['node', 'rustc', 'hermes-agent', 'chrome', 'Code Helper', 'd
 
 /* ----------------------------------------------------------------- tasks */
 
-const TASK_SEEDS: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'steps'>[] = [
+const TASK_SEEDS: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'steps' | 'order' | 'labels' | 'priority'>[] = [
   {
     title: '重构 payments 模块的错误处理',
     intent: '把散落的 try/catch 收敛成统一的 Result 类型,并补上单测',
@@ -109,6 +109,11 @@ function buildTask(seed: (typeof TASK_SEEDS)[number], now: number): Task {
     id: uid(),
     createdAt: now - Math.floor(Math.random() * 3600_000),
     updatedAt: now,
+    // P1-C: order / labels / priority are not in the seed, so we hardcode
+    // defaults here. moveTask renorms order whenever the user drags.
+    order: now,
+    labels: [],
+    priority: 1,
     steps: STEP_LABELS.map((label, i) => ({
       id: uid(),
       label,
@@ -133,7 +138,10 @@ interface Script {
   match: RegExp;
   reply: string[];
   tools?: { name: string; summary: string; output: string }[];
-  task?: { title: string; intent: string; executor: Task['executor']; project: string; tags: string[] };
+  /** P1-B: optional rich tool card. Renders as a table/diff/code/chart/log
+   *  depending on the payload. Drawn after the regular tools. */
+  richTool?: ToolCall;
+  task?: { title: string; intent: string; executor: Task['executor']; project: string; tags: string[] } & Partial<Pick<Task, 'labels' | 'priority' | 'order'>>;
   mood?: Mood;
   emotion?: { emotion: Emotion; intensity: number; trigger?: string };
   action?: PersonaAction;
@@ -154,6 +162,26 @@ const SCRIPTS: Script[] = [
       { name: 'os.processes', summary: 'ps aux --sort=-%mem | head -20', output: 'node 6.2G · rustc 1.8G · chrome 1.1G' },
       { name: 'os.inspect', summary: 'pgrep -P 1 node', output: '2 orphaned node processes' },
     ],
+    richTool: {
+      id: uid(),
+      name: 'os.processes',
+      summary: '内存 Top 10',
+      status: 'ok',
+      kind: 'table',
+      payload: {
+        kind: 'table',
+        columns: ['PID', '进程', 'RSS', 'CPU%', '状态'],
+        rows: [
+          [1824, 'node', '6.2G', '12%', '运行中'],
+          [1924, 'node', '4.8G', '4%',  '孤儿'],
+          [2031, 'node', '2.1G', '0%',  '孤儿'],
+          [4102, 'rustc', '1.8G', '85%', '运行中'],
+          [5021, 'chrome', '1.1G', '3%',  '运行中'],
+          [5099, 'code', '780M', '2%',  '运行中'],
+        ],
+        caption: '按内存排序,前 6 项已占 16.8 GB',
+      },
+    } as ToolCall,
     mood: { valence: -0.05, arousal: 0.25, dominance: 0.2, intimacy: 0.4 },
     emotion: { emotion: 'concerned', intensity: 0.5, trigger: 'high memory pressure' },
   },
@@ -339,7 +367,7 @@ function synthCI() {
  * tasks. In a real backend this would shell out to Hermes; in the prototype
  * we just put a believable task on the board with the right executor.
  */
-const ACCEPTED_PROPOSAL_SEEDS: Record<string, Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'steps' | 'status' | 'progress'>> = {
+const ACCEPTED_PROPOSAL_SEEDS: Record<string, Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'steps' | 'status' | 'progress' | 'order' | 'labels' | 'priority'>> = {
   'metric.disk': {
     title: '扫描 ~/Downloads 的 30 天前旧文件',
     intent: '出清单,不动手,等你批准',
@@ -569,6 +597,9 @@ export class MockBackend implements Provider {
       createdAt: now,
       updatedAt: now,
       externalId: `run_${uid().slice(0, 6)}`,
+      labels: [],        // P1-C
+      priority: 1,       // P1-C
+      order: now,        // P1-C
       steps: STEP_LABELS.map((label, i) => ({
         id: uid(),
         label,
@@ -759,6 +790,16 @@ export class MockBackend implements Provider {
       );
       delay += 220;
     }
+    // P1-B: rich tool card with structured payload (table/diff/chart/log/code).
+    if (script.richTool) {
+      const rc = script.richTool as ToolCall;
+      const call: ToolCall = { ...rc, id: uid(), status: 'running' };
+      at(delay, () => this.emit({ kind: 'tool.start', messageId, call }));
+      delay += 600;
+      at(delay, () =>
+        this.emit({ kind: 'tool.end', messageId, callId: call.id, status: (rc.status === 'running' ? 'ok' : rc.status) as 'ok' | 'failed' | 'denied' }),
+      );
+    }
 
     if (script.task) {
       const now = Date.now();
@@ -771,6 +812,9 @@ export class MockBackend implements Provider {
         createdAt: now,
         updatedAt: now,
         externalId: `run_${uid().slice(0, 6)}`,
+        labels: [],     // P1-C
+        priority: 1,    // P1-C: default mid-priority
+        order: now,     // P1-C: arrival order; moveTask renorms
         steps: STEP_LABELS.map((label, i) => ({
           id: uid(),
           label,

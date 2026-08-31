@@ -35,16 +35,142 @@ function exportConversationJSON(messages: Message[]): string {
 const time = (t: number) =>
   new Date(t).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 
+/** P1-I: heuristic message category. Cheap regex-only — never blocks render. */
+function categorize(text: string): { tag: 'ask' | 'commit' | 'share' | 'event' | 'plan'; label: string } {
+  if (/\?|？/.test(text) || /能不能|要不|能否|会不会|怎么|为什么/.test(text)) {
+    return { tag: 'ask', label: '提问' };
+  }
+  if (/批准|提交|merge|commit|我先|完成|搞|写好|弄好|发了|推送/.test(text)) {
+    return { tag: 'commit', label: '提交' };
+  }
+  if (/下一步|计划|阶段|然后|接下来|流程|步骤/.test(text)) {
+    return { tag: 'plan', label: '计划' };
+  }
+  if (/完成|失败|报错|异常|崩溃|已修|删除|创建|拉取/.test(text)) {
+    return { tag: 'event', label: '事件' };
+  }
+  return { tag: 'share', label: '分享' };
+}
+
 /** Inline record of a tool the agent ran, collapsed to one line. */
+/** P1-B: rich tool call rendering.
+ *  Each payload kind has its own component. The dispatcher collapses to
+ *  the legacy text view when payload is missing or unrecognised. */
 function ToolRow({ call }: { call: ToolCall }) {
+  const kind = call.payload?.kind ?? call.kind ?? 'text';
   return (
     <div className={`tool tool--${call.status}`}>
-      <span className="tool__icon" aria-hidden />
-      <span className="tool__name mono">{call.name}</span>
-      <span className="tool__summary mono">{call.summary}</span>
-      {call.output && <span className="tool__output mono">{call.output}</span>}
+      <header className="tool__head">
+        <span className="tool__icon" aria-hidden />
+        <span className="tool__name mono">{call.name}</span>
+        <span className="tool__summary mono">{call.summary}</span>
+        <span className={`tool__kind mono tool__kind--${kind}`}>{kind}</span>
+      </header>
+      {call.payload && call.payload.kind !== 'text' ? (
+        <ToolPayloadRenderer payload={call.payload} />
+      ) : (call.output || (call.payload && call.payload.kind === 'text')) ? (
+        <pre className="tool__output mono">{(call.payload && call.payload.kind === 'text') ? call.payload.text : call.output}</pre>
+      ) : null}
     </div>
   );
+}
+
+function ToolPayloadRenderer({ payload }: { payload: NonNullable<ToolCall['payload']> }) {
+  if (payload.kind === 'code') {
+    return (
+      <pre className="tool__code mono">
+        <span className="tool__lang">{payload.language}</span>
+        {payload.code}
+      </pre>
+    );
+  }
+  if (payload.kind === 'diff') {
+    const before = payload.before.split('\n');
+    const after = payload.after.split('\n');
+    return (
+      <div className="tool__diff mono">
+        {payload.filename && <div className="tool__diff-name">— {payload.filename}</div>}
+        {before.map((l, i) => (
+          <div key={'b' + i} className="tool__diff-row tool__diff-row--del">{l}</div>
+        ))}
+        {after.map((l, i) => (
+          <div key={'a' + i} className="tool__diff-row tool__diff-row--add">{l}</div>
+        ))}
+      </div>
+    );
+  }
+  if (payload.kind === 'table') {
+    return (
+      <div className="tool__table-wrap">
+        {payload.caption && <div className="tool__caption">{payload.caption}</div>}
+        <table className="tool__table mono">
+          <thead>
+            <tr>{payload.columns.map((c, i) => <th key={i}>{c}</th>)}</tr>
+          </thead>
+          <tbody>
+            {payload.rows.map((row, i) => (
+              <tr key={i}>{row.map((cell, j) => <td key={j}>{cell ?? '—'}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  if (payload.kind === 'chart') {
+    const max = Math.max(0, ...payload.series.flatMap((s) => s.values));
+    return (
+      <div className="tool__chart">
+        {payload.chart === 'bar' ? (
+          <div className="tool__bars">
+            {payload.xLabels.map((x, i) => (
+              <div key={i} className="tool__bar-col">
+                <div className="tool__bars-stack">
+                  {payload.series.map((s, j) => (
+                    <div
+                      key={j}
+                      className="tool__bar"
+                      data-series={s.label}
+                      style={{ height: `${max ? (s.values[i] ?? 0) / max * 100 : 0}%` }}
+                      title={`${s.label}: ${s.values[i] ?? 0}`}
+                    />
+                  ))}
+                </div>
+                <span className="tool__bar-x">{x}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <svg className="tool__line" viewBox="0 0 200 80" preserveAspectRatio="none">
+            {payload.series.map((s, idx) => {
+              const max = Math.max(...s.values);
+              const step = 200 / Math.max(1, s.values.length - 1);
+              const points = s.values.map((v, i) => `${i * step},${80 - (v / Math.max(1, max)) * 70 - 5}`).join(' ');
+              return <polyline key={idx} points={points} fill="none" stroke={`hsl(${(idx * 80) % 360} 80% 60%)`} strokeWidth="1.5" />;
+            })}
+          </svg>
+        )}
+        <div className="tool__chart-legend">
+          {payload.series.map((s, i) => <span key={i} data-series={s.label}>{s.label}</span>)}
+        </div>
+      </div>
+    );
+  }
+  if (payload.kind === 'log') {
+    return (
+      <div className="tool__log mono">
+        {payload.entries.map((e, i) => (
+          <div key={i} className={`tool__log-row tool__log-row--${e.level}`}>
+            <span className="tool__log-level">{e.level.toUpperCase()}</span>
+            <span>{e.message}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (payload.kind === 'markdown') {
+    return <div className="tool__md">{payload.text}</div>;
+  }
+  return null;
 }
 
 function Bubble({ message }: { message: Message }) {
@@ -57,9 +183,12 @@ function Bubble({ message }: { message: Message }) {
   return (
     <article className={`msg msg--${message.speaker}`}>
       <header className="msg__head">
-        <span className="label">{mine ? '你' : message.speaker === 'system' ? '系统' : 'JARVIS'}</span>
-        <span className="label msg__time">{time(message.at)}</span>
-      </header>
+              <span className="label">{mine ? '你' : message.speaker === 'system' ? '系统' : 'JARVIS'}</span>
+              {message.text && !mine && (
+                <span className={`msg__tag msg__tag--${categorize(message.text).tag}`}>{categorize(message.text).label}</span>
+              )}
+              <span className="label msg__time">{time(message.at)}</span>
+            </header>
 
       {message.toolCalls?.length ? (
         <div className="msg__tools">
@@ -174,6 +303,50 @@ export function Conversation() {
         {visible.map((m) => <Bubble key={m.id} message={m} />)}
         <div ref={endRef} />
       </div>
+      <SmartReplyChips />
+    </div>
+  );
+}
+
+/** P1-H: heuristic-driven quick replies.
+ *  Reads the last jarvis message and the user's recent turns to suggest
+ *  three chips: a confirmation, a follow-up, and a "let me think" option.
+ *  When the last line is a question or proposal, the chips adapt. */
+function SmartReplyChips() {
+  const messages = useSession((s) => s.messages);
+  const lastJarvis = [...messages].reverse().find((m) => m.speaker === 'jarvis');
+  const lastUser = [...messages].reverse().find((m) => m.speaker === 'user');
+  if (!lastJarvis) return null;
+  const text = lastJarvis.text ?? '';
+  const isQuestion = /\?\uFF1F/.test(text) || /你(觉得|想要|想|打算|需要|要不要|好吗)/.test(text);
+  const isApproval = /批准|确认|拍板|要不要|需要你/.test(text);
+  const isFollowUp = /下一步|然后|现在|等会儿|我先/.test(text);
+
+  let chips: string[];
+  if (isApproval) {
+    chips = ['批准执行', '先不动', '给我看看选项'];
+  } else if (isQuestion) {
+    chips = ['好的,就这么办', '我再想想', '你有什么建议'];
+  } else if (isFollowUp) {
+    chips = ['继续', '看下细节', '暂停一下'];
+  } else {
+    chips = ['继续', '讲点别的', '谢谢'];
+  }
+  // Bias by recent user message if available
+  if (lastUser) {
+    const userText = lastUser.text ?? '';
+    if (userText.includes('明天') || userText.includes('下次')) {
+      chips = ['好', '改天再说', '提醒我'];
+    }
+  }
+  return (
+    <div className="convo__replies">
+      <span className="label">建议回复</span>
+      {chips.map((c) => (
+        <button key={c} className="convo__reply-chip" onClick={() => useSession.getState().send(c)}>
+          {c}
+        </button>
+      ))}
     </div>
   );
 }
