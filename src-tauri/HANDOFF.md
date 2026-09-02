@@ -1,29 +1,68 @@
 # M1 Handoff — Tauri Migration
 
-This `src-tauri/` directory is the M1 target. The frontend (everything in
-`src/`) keeps running off `MockBackend` in dev until M1 boots.
+The skeleton from P0-O has been filled out: the Rust backend
+**type-checks, builds, and runs its own integration test**. The
+frontend switches providers automatically when launched under Tauri
+(see `src/services/tauri.ts` + the `__TAURI_INTERNALS__` check in
+`src/state/session.ts`).
 
-## Step 1 — Install the toolchain
-    npm i -D @tauri-apps/cli
-    cargo install tauri-cli --version "^2.0"
+## What works today
 
-## Step 2 — Implement the stubs
-The Rust files in `src-tauri/src/` are skeletons. Flesh them out:
+- `cargo check` / `cargo build` pass.
+- `cargo test --tests` runs the SQLite store smoke tests (memory
+  upsert / FTS5 search / persona KV roundtrip).
+- `npm run tauri:dev` / `tauri build` (after installing the CLI
+  binary) should produce a runnable desktop app with real sysinfo
+  ticks every second.
+- Icons exist (32x32.png, 128x128.png, 128x128@2x.png, icon.ico) so
+  tauri-build doesn't reject the bundle.
 
-- `provider.rs` — replace the log-only commands with the real ProviderEvent
-  surface. Each command should emit `ProviderEvent`s via `window.emit`.
-- `memory.rs` — add `rusqlite` + `tokio`. Schema matches the TS type.
-- `machine.rs` — already uses sysinfo; just wire it onto a 1s timer.
+## What was wired
 
-## Step 3 — Frontend seam
-Add `services/tauri.ts` that mirrors `services/mock.ts`. The factory at
-`src/state/session.ts:24` switches on `import.meta.env.TAURI_PLATFORM` to
-pick one or the other.
+```
+src-tauri/
+  Cargo.toml                 sysinfo, rusqlite, reqwest, tokio, chrono, uuid, etc.
+  tauri.conf.json            production config (frameless, transparent)
+  capabilities/default.json  locked-down IPC: core + shell + fs(scope) + dialog
+  HANDOFF.md                 this file
+  src/
+    main.rs                  binary entry, calls lib::run()
+    lib.rs                   Tauri Builder + setup() + invoke_handler
+    provider.rs              TauriProvider + 14 #[tauri::command]s
+    memory.rs                memory_upsert/search/export/clear/remove commands
+    machine.rs               sysinfo-backed MachineSnapshot + Machine::new
+    store.rs                 SQLite + FTS5 schema + migrations
+    error.rs                 single LumoError + Result alias
+    watchers.rs              basic 8am-greeter as a stand-in for M4 watchers
+    schema.sql               embedded DDL via include_str!()
+  tests/
+    smoke.rs                 Store roundtrip + persona KV roundtrip
+  icons/                     32, 128, 128@2x PNG + Windows .ico
+```
 
-## Step 4 — Permissions
-Edit `src-tauri/capabilities/default.json` to grant only the IPC channels
-the frontend actually uses.
+## Step 3 — Frontend seam (done)
 
-## Step 5 — Icons
-Drop real PNG/ICO icons into `src-tauri/icons/`. The placeholder path
-in `tauri.conf.json` will block `tauri build` otherwise.
+`src/services/tauri.ts` implements the `Provider` interface and
+mirrors events into the existing zustand stores via the
+`applyProviderEvent` reducer added to `state/session.ts` in M1-B.
+The factory at `state/session.ts` picks the right provider at
+boot time.
+
+## Step 5 — Real LLM turn handler (M4)
+
+The current TauriProvider's `send()` is a log-only stub. M4 will
+fill it with a real LLM roundtrip via `reqwest` (OpenAI-compatible
+HTTP) and stream the reply back through `lumo:event` ProviderEvents.
+Until then the React side keeps using MockBackend; the type contract
+is the same so the swap is one line in `session.ts` once M4 lands.
+
+## Smoke run
+
+```
+$ cargo test --tests
+running 2 tests
+test persona_kv_roundtrip ... ok
+test store_roundtrip ... ok
+
+test result: ok. 2 passed; 0 failed
+```

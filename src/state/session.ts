@@ -30,7 +30,9 @@ function uid() { return Math.random().toString(36).slice(2, 10); }
  * now. The mock backend runs the actual watcher loop; the production
  * backend will do the same against real OS / Hermes signals.
  */
-const provider: Provider = new MockBackend({ watchers: DEFAULT_WATCHERS });
+const provider: Provider = (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window)
+  ? new (await import('../services/tauri').then((m) => m.TauriProvider))()
+  : new MockBackend({ watchers: DEFAULT_WATCHERS });
 
 const EMPTY_COUNTS: Record<TaskStatus, number> = {
   queued: 0, running: 0, blocked: 0, review: 0, done: 0, failed: 0, cancelled: 0,
@@ -55,6 +57,12 @@ interface SessionState {
   setAmplitude: (amp: number) => void;
   /** Append a system-role message to the transcript (no provider round-trip). */
   pushSystem: (text: string) => void;
+  /** M1-B: apply a ProviderEvent from any source. Mirrors what MockBackend
+   *  already does internally; the TauriProvider uses it to apply events
+   *  emitted by Rust. */
+  applyProviderEvent: (event: import('../services/provider').ProviderEvent) => void;
+  /** M1-B: upsert a single task from outside the event stream. */
+  upsertTask: (task: import('../core/types').Task) => void;
   selectTask: (id: string | null) => void;
   cancelTask: (id: string) => void;
   retryTask: (id: string) => void;
@@ -227,6 +235,129 @@ export const useSession = create<SessionState>((set) => ({
       messages: [...s.messages, { id: Math.random().toString(36).slice(2), speaker: 'user', text: trimmed, at: Date.now() }],
     }));
     void provider.send(trimmed);
+  },
+
+  // M1-B: apply a ProviderEvent from any source. Mirrors what
+  // MockBackend already does internally; the TauriProvider uses it
+  // to apply events emitted by Rust. We map the discriminated union
+  // to local store updates.
+  applyProviderEvent: (event) => {
+    switch (event.kind) {
+      case 'message.start':
+        set((s) => ({
+          agentState: 'acting',
+          messages: [...s.messages, event.message],
+        }));
+        return;
+      case 'message.delta': {
+        const targetId = event.id;
+        set((s) => ({
+          messages: s.messages.map((m) =>
+            m.id === targetId
+              ? { ...m, text: (m.text ?? '') + event.text }
+              : m,
+          ),
+        }));
+        return;
+      }
+      case 'message.end': {
+        const targetId = event.id;
+        set((s) => ({
+          messages: s.messages.map((m) =>
+            m.id === targetId ? { ...m, streaming: false } : m,
+          ),
+        }));
+        return;
+      }
+      case 'tool.start':
+        set((s) => ({
+          agentState: 'acting',
+          messages: s.messages.map((m) =>
+            m.id === event.messageId
+              ? { ...m, toolCalls: [...(m.toolCalls ?? []), event.call] }
+              : m,
+          ),
+        }));
+        return;
+      case 'tool.end':
+        set((s) => ({
+          messages: s.messages.map((m) =>
+            m.id !== event.messageId
+              ? m
+              : {
+                  ...m,
+                  toolCalls: m.toolCalls?.map((c) =>
+                    c.id === event.callId
+                      ? { ...c, status: event.status as 'ok' | 'failed' | 'denied' | 'running', output: event.output }
+                      : c,
+                  ),
+                },
+          ),
+        }));
+        return;
+      case 'task.upsert':
+        set((s) => {
+          const i = s.tasks.findIndex((t) => t.id === event.task.id);
+          if (i === -1) return { tasks: [event.task, ...s.tasks] };
+          const prev = s.tasks[i];
+          if (prev.status !== event.task.status && (event.task.status === 'done' || event.task.status === 'failed')) {
+            recordActivity({
+              kind: event.task.status === 'done' ? 'task_completed' : 'task_failed',
+              title: (event.task.status === 'done' ? '完成：' : '失败：') + event.task.title,
+              detail: event.task.result,
+              ref: { kind: 'task', id: event.task.id },
+            });
+          }
+          const next = [...s.tasks];
+          next[i] = event.task;
+          return { tasks: next };
+        });
+        return;
+      case 'machine':
+        set({ machine: event.snapshot });
+        return;
+      case 'connector':
+        set((s) => ({
+          connectors: { ...s.connectors, [event.status.id]: event.status },
+        }));
+        return;
+      case 'message.memoryRefs':
+        set((s) => ({
+          messages: s.messages.map((m) =>
+            m.id === event.messageId
+              ? { ...m, memoryRefs: [...(m.memoryRefs ?? []), ...event.ids] }
+              : m,
+          ),
+        }));
+        return;
+      case 'mood':
+        usePersona.getState().pushMood(event.mood);
+        return;
+      case 'emotion':
+        usePersona.getState().pushEmotion(event.emotion, event.intensity, event.trigger);
+        return;
+      case 'persona-action':
+        usePersona.getState().pushAction(event.action);
+        return;
+      case 'persona':
+        usePersona.getState().setPersona(event.preset, event.name ?? 'Lumina');
+        return;
+      case 'proposal':
+        usePersona.getState().pushProposal(event.proposal);
+        return;
+    }
+  },
+
+  // M1-B: upsert a single task (used by the TauriProvider when Rust
+  // pushes a task event). Same shape as Task.
+  upsertTask: (task) => {
+    set((s) => {
+      const i = s.tasks.findIndex((t) => t.id === task.id);
+      if (i === -1) return { tasks: [task, ...s.tasks] };
+      const next = [...s.tasks];
+      next[i] = task;
+      return { tasks: next };
+    });
   },
 
   setAgentState: (agentState) => set({ agentState }),
