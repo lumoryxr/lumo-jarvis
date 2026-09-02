@@ -1,0 +1,32 @@
+/* M2: VRMAvatar canvas host. Replaces HoloCore's <canvas> in AvatarStage. */
+.vrm-avatar-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  cursor: default;
+}
+.vrm-avatar-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.vrm-avatar-host.is-loading {
+  opacity: 0.6;
+  transition: opacity var(--slow) var(--ease);
+}
+.vrm-avatar-fallback-pill {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: rgba(4, 10, 18, 0.6);
+  font-size: 9px;
+  color: var(--ink-faint);
+  letter-spacing: 0.16em;
+  font-family: var(--font-mono);
+  pointer-events: none;
+}
