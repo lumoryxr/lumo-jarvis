@@ -148,3 +148,30 @@
 }
 .connectors__log-ts { color: var(--ink-faint); }
 .connectors__log-empty { color: var(--ink-faint); text-align: center; padding: 20px 0; }
+
+.connectors__config {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.connectors__config-row { display: flex; gap: 6px; }
+.connectors__input {
+  flex: 1;
+  background: rgba(4, 10, 18, 0.6);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 9px;
+  outline: none;
+}
+.connectors__input:focus { border-color: var(--hairline-bright); }
+.connectors__config-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--cyan-soft);
+}

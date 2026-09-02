@@ -13,6 +13,7 @@ import { ConnectorsModal } from './components/ConnectorsModal';
 import { useOnboarding } from './state/onboarding';
 import { useSession, provider } from './state/session';
 import { useWindowMode, installWindowModeHotkeys } from './state/windowMode';
+import { useVoiceLoop } from './hooks/useVoiceLoop';
 import './App.css';
 
 /**
@@ -35,6 +36,11 @@ export default function App() {
   const mode = useWindowMode((s) => s.mode);
   const onboarded = useIsOnboarded();
   const [connectorsOpen, setConnectorsOpen] = useState(false);
+  // M3-F: continuous listening toggle. Cmd+Shift+V flips it on/off.
+  // While enabled, the avatar speaks back what it hears, barge-in
+  // aborts the current utterance, and a 800ms silence commits a turn.
+  const [voiceLoop, setVoiceLoop] = useState(false);
+  useVoiceLoop({ enabled: voiceLoop });
 
   useEffect(() => { boot(); }, [boot]);
   useEffect(() => installWindowModeHotkeys(), []);
@@ -47,7 +53,8 @@ export default function App() {
         if (e.key === ',' && !e.shiftKey) { e.preventDefault(); openOnboardingAt(0); return; }
         if (e.key.toLowerCase() === 'm' && !e.shiftKey) { e.preventDefault(); toggleActivityPanel(); return; }
         if (e.key === '.' && !e.shiftKey) { e.preventDefault(); setConnectorsOpen((v) => !v); return; }
-      }
+                if (e.key.toLowerCase() === 'v' && e.shiftKey) { e.preventDefault(); setVoiceLoop((v) => !v); return; }
+              }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

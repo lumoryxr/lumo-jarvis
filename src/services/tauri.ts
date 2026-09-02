@@ -1,26 +1,23 @@
 /**
  * TauriProvider — production counterpart to services/mock.ts.
  *
- * Activates only when running inside a Tauri webview window. The session
- * store picks it automatically:
- *
- *   const provider: Provider = isTauri() ? new TauriProvider() : new MockBackend(...);
- *
+ * Activates only when running inside a Tauri webview window.
  * Implementation strategy:
- *   - We `invoke()` Rust commands for one-shot ops (cmd_send, memory_upsert).
- *   - We `listen('lumo:event')` for the ProviderEvent stream the Rust side
- *     pushes via `window.emit()`. The Rust ProviderEvent serialises with
- *     serde(tag = "kind"); we map each variant onto the matching TS
- *     ProviderEvent shape (see `mirrorEvent`).
- *   - We mirror memory / tasks / proposals / persona into the React-side
- *     zustand stores so the existing components keep working unchanged.
+ *   - We invoke() Rust commands for one-shot ops.
+ *   - We listen('lumo:event') for the ProviderEvent stream the Rust
+ *     side pushes via window.emit(). Each Rust ProviderEvent maps 1:1
+ *     onto the matching TS ProviderEvent shape (see mirrorEvent).
+ *   - send(text) is a Tauri command roundtrip; cmd_send logs and
+ *     acknowledges. Real LLM turn handler lands in M4; until then the
+ *     React side drives scripted replies via MockBackend.
  *
- * If Tauri isn't loaded, the `invoke`/`listen` calls throw at construction
- * time — that's by design; the caller checks `isTauri()` first.
+ * Hermes dispatch is exposed via dispatchHermes() which uses
+ * cmd_hermes_dispatch. The session store calls it when the user
+ * creates a task with executor='hermes'.
  */
 
 import type { Provider, ProviderEvent, ProviderListener } from './provider';
-import type { MachineSnapshot, Mood, Emotion, PersonaAction, PersonaPreset } from '../core/types';
+import type { MachineSnapshot, Mood, Emotion, PersonaAction, PersonaPreset, Proposal } from '../core/types';
 import { useSession } from '../state/session';
 import { usePersona } from '../state/persona';
 import { recordActivity } from '../state/activity';
@@ -37,30 +34,20 @@ interface TauriWindow {
 let _w: TauriWindow | null = null;
 async function tauri(): Promise<TauriWindow> {
   if (_w) return _w;
-  // Dynamic import so the dev bundle (vite, no Tauri runtime) doesn't
-  // pull in @tauri-apps/api at startup.
-  // The Vite @vite-ignore comment tells the bundler to skip the
-  // pre-bundle step; the import is resolved by the Tauri webview at
-  // runtime.
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore -- optional runtime dependency, see package.json
+  // @ts-ignore -- optional runtime dep, see package.json
   const api = await import('@tauri-apps/api/core').catch(() => null);
   // @ts-ignore
   const evt = await import('@tauri-apps/api/event').catch(() => null);
-  if (!api || !evt) {
-    throw new Error('@tauri-apps/api not available');
-  }
+  if (!api || !evt) throw new Error('@tauri-apps/api not available');
   _w = { invoke: api.invoke as TauriInvoke, listen: evt.listen as TauriListen };
   return _w;
 }
 
-/** Detect whether the current window is inside a Tauri webview. */
 export function isTauri(): boolean {
   if (typeof window === 'undefined') return false;
   return '__TAURI_INTERNALS__' in window;
 }
 
-/** LumenProvider — wraps the Rust TauriProvider. */
 export class TauriProvider implements Provider {
   readonly id = 'tauri';
   private listeners = new Set<ProviderListener>();
@@ -118,7 +105,7 @@ export class TauriProvider implements Provider {
     await t.invoke('cmd_set_proactiveness_band', { band });
   }
 
-  async pushProposal(p: import('../core/types').Proposal): Promise<void> {
+  async pushProposal(p: Proposal): Promise<void> {
     const t = await tauri();
     await t.invoke('cmd_push_proposal', { proposal: p });
   }
@@ -133,15 +120,48 @@ export class TauriProvider implements Provider {
     return t.invoke<MachineSnapshot>('cmd_machine_snapshot');
   }
 
+  /**
+   * Dispatch a Hermes run. The Rust side subscribes to the SSE
+   * stream and emits ProviderEvents as deltas/tools arrive; we just
+   * wait for the run record so the caller can store the external_id.
+   */
+  async dispatchHermes(input: string, instructions?: string): Promise<{ runId: string }> {
+    const t = await tauri();
+    const run = await t.invoke<{ run_id: string }>('cmd_hermes_dispatch', {
+      input,
+      instructions: instructions ?? null,
+    });
+    return { runId: run.run_id };
+  }
+
+  /** Configure the Hermes HTTP client (baseUrl + bearer token). */
+  async setHermesConfig(cfg: { baseUrl: string; apiKey: string; sessionKey?: string }): Promise<void> {
+    const t = await tauri();
+    await t.invoke('cmd_hermes_set_config', {
+      baseUrl: cfg.baseUrl,
+      apiKey: cfg.apiKey,
+      sessionKey: cfg.sessionKey ?? 'lumo-jarvis',
+    });
+  }
+
+  /** Hermes health check. */
+  async hermesHealth(): Promise<boolean> {
+    const t = await tauri();
+    try {
+      return await t.invoke<boolean>('cmd_hermes_health');
+    } catch {
+      return false;
+    }
+  }
+
   stop(): void {
     this.unlisten?.();
     this.listeners.clear();
   }
 }
 
-/* The Rust ProviderEvent uses snake_case tags that map onto the TS
- * union. The shape of each payload is identical (serde with derive
- * produces the same fields) so we can pass through to mirrorEvent. */
+/* ----------------------------------------------------------------- events */
+
 type RustEvent =
   | { kind: 'message.start'; message: import('../core/types').Message }
   | { kind: 'message.delta'; id: string; text: string }
@@ -171,7 +191,6 @@ function mirrorEvent(ev: RustEvent): void {
     case 'machine':
     case 'connector.status':
     case 'message.memoryRefs':
-      // Map to the TS ProviderEvent shape (camelCase).
       useSession.getState().applyProviderEvent(toTsProviderEvent(ev));
       return;
     case 'mood':
@@ -198,8 +217,6 @@ function mirrorEvent(ev: RustEvent): void {
   }
 }
 
-/** Convert a Rust-shaped event to a TS ProviderEvent.
- *  Fields use snake_case in Rust's serde default; we map to camelCase. */
 function toTsProviderEvent(ev: RustEvent): ProviderEvent {
   switch (ev.kind) {
     case 'message.start':
@@ -227,7 +244,6 @@ function toTsProviderEvent(ev: RustEvent): ProviderEvent {
     case 'connector.status':
       return { kind: 'connector', status: ev.status };
     default:
-      // Unreachable: guarded by the caller.
       throw new Error(`unexpected rust event: ${(ev as { kind: string }).kind}`);
   }
 }

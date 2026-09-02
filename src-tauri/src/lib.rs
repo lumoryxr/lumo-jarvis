@@ -1,8 +1,4 @@
 //! Lumo JARVIS Tauri backend.
-//!
-//! In M1 this module is the production counterpart to the React-side
-//! `services/mock.ts` MockBackend. The frontend switches providers based on
-//! `import.meta.env.TAURI_PLATFORM` (see `src/services/provider.ts`).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -12,6 +8,7 @@ pub mod machine;
 pub mod store;
 pub mod error;
 pub mod watchers;
+pub mod hermes;
 
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -19,10 +16,12 @@ use tauri::Manager;
 
 use crate::provider::TauriProvider;
 use crate::store::Store;
+use crate::hermes::Hermes;
 
 pub struct LumoState {
     pub provider: Arc<Mutex<TauriProvider>>,
     pub store: Arc<Store>,
+    pub hermes: Arc<Hermes>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -44,9 +43,16 @@ pub fn run() {
             );
             provider.start();
 
+            // M3-A: Hermes HTTP client. Persisted config lives next
+            // to the SQLite file; for the prototype we just boot with
+            // a default config and let the React side push real values
+            // via cmd_hermes_set_config.
+            let hermes = Arc::new(Hermes::new(Default::default()));
+
             app.manage(LumoState {
                 provider: Arc::new(Mutex::new(provider)),
                 store,
+                hermes,
             });
 
             Ok(())
@@ -71,6 +77,12 @@ pub fn run() {
             memory::cmd_memory_upsert,
             memory::cmd_memory_remove,
             machine::cmd_machine_snapshot,
+            hermes::cmd_hermes_health,
+            hermes::cmd_hermes_create,
+            hermes::cmd_hermes_get,
+            hermes::cmd_hermes_stop,
+            hermes::cmd_hermes_set_config,
+            hermes::cmd_hermes_dispatch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Lumo JARVIS");

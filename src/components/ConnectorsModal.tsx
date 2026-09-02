@@ -29,6 +29,67 @@ const ERROR_LOG: Record<ConnectorId, { ts: number; msg: string }[]> = {
 /** P1-E: a single tab-like page that surfaces every connector's status,
  *  latency, last error, and a manual retry button. Triggered by Cmd+. or
  *  by clicking a connector in the SystemRail. */
+/**
+ * HermesConfigCard — baseUrl + bearer token form. Submits through the
+ * Tauri provider when running under Tauri; otherwise just shows the
+ * legacy "mocked" notice. Saved to localStorage so the user doesn't
+ * have to re-enter every boot.
+ */
+function HermesConfigCard() {
+  const [baseUrl, setBaseUrl] = useState(localStorage.getItem('lumo.hermes.url') ?? 'http://127.0.0.1:8642');
+  const [apiKey, setApiKey] = useState(localStorage.getItem('lumo.hermes.key') ?? '');
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  async function apply() {
+    setBusy(true);
+    setStatus(null);
+    try {
+      localStorage.setItem('lumo.hermes.url', baseUrl);
+      localStorage.setItem('lumo.hermes.key', apiKey);
+      const t = await import('../services/tauri');
+      if (t.isTauri()) {
+        await new t.TauriProvider().setHermesConfig({ baseUrl, apiKey });
+        const ok = await new t.TauriProvider().hermesHealth();
+        setStatus(ok ? '已联通' : '连接失败（gateway 未起？）');
+      } else {
+        setStatus('Mock 模式：未连真 gateway');
+      }
+    } catch (e) {
+      setStatus(`保存失败: ${e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="connectors__config">
+      <div className="label">本地 Hermes gateway</div>
+      <div className="connectors__config-row">
+        <input
+          className="connectors__input"
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          placeholder="http://127.0.0.1:8642"
+        />
+      </div>
+      <div className="connectors__config-row">
+        <input
+          className="connectors__input"
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder="API_SERVER_KEY（不存到 webview）"
+        />
+      </div>
+      <button className="connectors__btn connectors__btn--primary" disabled={busy} onClick={apply}>
+        {busy ? '测试中…' : '保存并测试'}
+      </button>
+      {status && <span className="connectors__config-status">{status}</span>}
+    </div>
+  );
+}
+
 export function ConnectorsModal({ open, onClose, focusId }: {
   open: boolean;
   onClose: () => void;
@@ -82,7 +143,9 @@ export function ConnectorsModal({ open, onClose, focusId }: {
 
           <p className="connectors__detail-line">{active.detail}</p>
 
-          <div className="connectors__actions">
+                    {tab === 'hermes' && <HermesConfigCard />}
+
+                    <div className="connectors__actions">
             <button
               className="connectors__btn"
               onClick={() => setConnectorStatus(tab, 'online')}
