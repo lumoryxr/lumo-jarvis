@@ -35,6 +35,76 @@ const ERROR_LOG: Record<ConnectorId, { ts: number; msg: string }[]> = {
  * legacy "mocked" notice. Saved to localStorage so the user doesn't
  * have to re-enter every boot.
  */
+/**
+ * LLMConfigCard — endpoint + bearer + model + system prompt. Wired
+ * through TauriProvider.setLlmConfig when running under Tauri;
+ * otherwise the localStorage cache is kept so a future launch under
+ * Tauri can pick it up. The token never enters the webview state tree.
+ */
+function LlmConfigCard() {
+  const [endpoint, setEndpoint] = useState(localStorage.getItem('lumo.llm.url') ?? 'https://api.openai.com/v1/chat/completions');
+  const [apiKey, setApiKey] = useState(localStorage.getItem('lumo.llm.key') ?? '');
+  const [model, setModel] = useState(localStorage.getItem('lumo.llm.model') ?? 'gpt-4o-mini');
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  async function apply() {
+    setBusy(true);
+    setStatus(null);
+    try {
+      localStorage.setItem('lumo.llm.url', endpoint);
+      localStorage.setItem('lumo.llm.key', apiKey);
+      localStorage.setItem('lumo.llm.model', model);
+      const t = await import('../services/tauri');
+      if (t.isTauri()) {
+        await new t.TauriProvider().setLlmConfig({ endpoint, apiKey, model });
+        setStatus(apiKey ? '已保存（下次 send 会走真 LLM）' : '未配置 key → 保持 mock');
+      } else {
+        setStatus('Mock 模式：Tauri 内核未启动');
+      }
+    } catch (e) {
+      setStatus(`保存失败: ${e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="connectors__config">
+      <div className="label">远端 LLM（OpenAI 兼容）</div>
+      <div className="connectors__config-row">
+        <input
+          className="connectors__input"
+          value={endpoint}
+          onChange={(e) => setEndpoint(e.target.value)}
+          placeholder="https://api.openai.com/v1/chat/completions"
+        />
+      </div>
+      <div className="connectors__config-row">
+        <input
+          className="connectors__input"
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder="sk-...（不存到 webview）"
+        />
+      </div>
+      <div className="connectors__config-row">
+        <input
+          className="connectors__input"
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          placeholder="gpt-4o-mini"
+        />
+      </div>
+      <button className="connectors__btn connectors__btn--primary" disabled={busy} onClick={apply}>
+        {busy ? '保存中…' : '保存'}
+      </button>
+      {status && <span className="connectors__config-status">{status}</span>}
+    </div>
+  );
+}
+
 function HermesConfigCard() {
   const [baseUrl, setBaseUrl] = useState(localStorage.getItem('lumo.hermes.url') ?? 'http://127.0.0.1:8642');
   const [apiKey, setApiKey] = useState(localStorage.getItem('lumo.hermes.key') ?? '');
@@ -143,9 +213,10 @@ export function ConnectorsModal({ open, onClose, focusId }: {
 
           <p className="connectors__detail-line">{active.detail}</p>
 
-                    {tab === 'hermes' && <HermesConfigCard />}
+          {tab === 'hermes' && <HermesConfigCard />}
+          {tab === 'llm' && <LlmConfigCard />}
 
-                    <div className="connectors__actions">
+          <div className="connectors__actions">
             <button
               className="connectors__btn"
               onClick={() => setConnectorStatus(tab, 'online')}

@@ -219,7 +219,7 @@ impl Hermes {
 
 /// Parse one SSE frame into a HermesEvent. Returns None for frames
 /// we can't recognise (the gateway sends a few non-event heartbeats).
-fn parse_sse_frame(frame: &str) -> Option<HermesEvent> {
+pub fn parse_sse_frame(frame: &str) -> Option<HermesEvent> {
     let mut name = "message".to_string();
     let mut data_lines: Vec<&str> = Vec::new();
     for line in frame.split('\n') {

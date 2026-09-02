@@ -9,6 +9,7 @@ pub mod store;
 pub mod error;
 pub mod watchers;
 pub mod hermes;
+pub mod llm;
 
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -17,11 +18,13 @@ use tauri::Manager;
 use crate::provider::TauriProvider;
 use crate::store::Store;
 use crate::hermes::Hermes;
+use crate::llm::Llm;
 
 pub struct LumoState {
     pub provider: Arc<Mutex<TauriProvider>>,
     pub store: Arc<Store>,
     pub hermes: Arc<Hermes>,
+    pub llm: Arc<Llm>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -43,16 +46,16 @@ pub fn run() {
             );
             provider.start();
 
-            // M3-A: Hermes HTTP client. Persisted config lives next
-            // to the SQLite file; for the prototype we just boot with
-            // a default config and let the React side push real values
-            // via cmd_hermes_set_config.
+            // M3-A: Hermes HTTP client.
             let hermes = Arc::new(Hermes::new(Default::default()));
+            // M4: real LLM turn handler.
+            let llm = Arc::new(Llm::new(Default::default()));
 
             app.manage(LumoState {
                 provider: Arc::new(Mutex::new(provider)),
                 store,
                 hermes,
+                llm,
             });
 
             Ok(())
@@ -83,6 +86,8 @@ pub fn run() {
             hermes::cmd_hermes_stop,
             hermes::cmd_hermes_set_config,
             hermes::cmd_hermes_dispatch,
+            llm::cmd_llm_chat,
+            llm::cmd_llm_set_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Lumo JARVIS");

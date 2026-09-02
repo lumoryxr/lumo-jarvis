@@ -2,18 +2,13 @@
  * TauriProvider — production counterpart to services/mock.ts.
  *
  * Activates only when running inside a Tauri webview window.
- * Implementation strategy:
- *   - We invoke() Rust commands for one-shot ops.
- *   - We listen('lumo:event') for the ProviderEvent stream the Rust
- *     side pushes via window.emit(). Each Rust ProviderEvent maps 1:1
- *     onto the matching TS ProviderEvent shape (see mirrorEvent).
- *   - send(text) is a Tauri command roundtrip; cmd_send logs and
- *     acknowledges. Real LLM turn handler lands in M4; until then the
- *     React side drives scripted replies via MockBackend.
- *
  * Hermes dispatch is exposed via dispatchHermes() which uses
  * cmd_hermes_dispatch. The session store calls it when the user
  * creates a task with executor='hermes'.
+ *
+ * LLM turn handler (cmd_llm_chat) routes through OpenAI-compatible
+ * /chat/completions when configured; the React side still gets
+ * message.delta events so the avatar loop picks them up unchanged.
  */
 
 import type { Provider, ProviderEvent, ProviderListener } from './provider';
@@ -34,7 +29,7 @@ interface TauriWindow {
 let _w: TauriWindow | null = null;
 async function tauri(): Promise<TauriWindow> {
   if (_w) return _w;
-  // @ts-ignore -- optional runtime dep, see package.json
+  // @ts-ignore -- optional runtime dep
   const api = await import('@tauri-apps/api/core').catch(() => null);
   // @ts-ignore
   const evt = await import('@tauri-apps/api/event').catch(() => null);
@@ -120,11 +115,6 @@ export class TauriProvider implements Provider {
     return t.invoke<MachineSnapshot>('cmd_machine_snapshot');
   }
 
-  /**
-   * Dispatch a Hermes run. The Rust side subscribes to the SSE
-   * stream and emits ProviderEvents as deltas/tools arrive; we just
-   * wait for the run record so the caller can store the external_id.
-   */
   async dispatchHermes(input: string, instructions?: string): Promise<{ runId: string }> {
     const t = await tauri();
     const run = await t.invoke<{ run_id: string }>('cmd_hermes_dispatch', {
@@ -134,7 +124,6 @@ export class TauriProvider implements Provider {
     return { runId: run.run_id };
   }
 
-  /** Configure the Hermes HTTP client (baseUrl + bearer token). */
   async setHermesConfig(cfg: { baseUrl: string; apiKey: string; sessionKey?: string }): Promise<void> {
     const t = await tauri();
     await t.invoke('cmd_hermes_set_config', {
@@ -144,7 +133,23 @@ export class TauriProvider implements Provider {
     });
   }
 
-  /** Hermes health check. */
+  async setLlmConfig(cfg: { endpoint: string; apiKey: string; model: string; system?: string }): Promise<void> {
+    const t = await tauri();
+    await t.invoke('cmd_llm_set_config', {
+      endpoint: cfg.endpoint,
+      apiKey: cfg.apiKey,
+      model: cfg.model,
+      system: cfg.system ?? null,
+    });
+  }
+
+  /** LLM turn handler. Returns the message id; deltas arrive on the
+   *  shared lumo:event listener (the Rust side emits them). */
+  async chatLlm(input: string): Promise<string> {
+    const t = await tauri();
+    return t.invoke<string>('cmd_llm_chat', { input });
+  }
+
   async hermesHealth(): Promise<boolean> {
     const t = await tauri();
     try {
@@ -159,8 +164,6 @@ export class TauriProvider implements Provider {
     this.listeners.clear();
   }
 }
-
-/* ----------------------------------------------------------------- events */
 
 type RustEvent =
   | { kind: 'message.start'; message: import('../core/types').Message }
