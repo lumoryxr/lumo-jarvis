@@ -12,6 +12,9 @@ pub mod hermes;
 pub mod llm;
 pub mod global_shortcuts;
 pub mod clipboard;
+pub mod whisper;
+pub mod tray;
+pub mod screencap;
 
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -21,12 +24,15 @@ use crate::provider::TauriProvider;
 use crate::store::Store;
 use crate::hermes::Hermes;
 use crate::llm::Llm;
+use crate::whisper::{Whisper, WhisperSession};
 
 pub struct LumoState {
     pub provider: Arc<Mutex<TauriProvider>>,
     pub store: Arc<Store>,
     pub hermes: Arc<Hermes>,
     pub llm: Arc<Llm>,
+    pub whisper: Arc<Whisper>,
+    pub whisper_session: Arc<WhisperSession>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -52,12 +58,16 @@ pub fn run() {
 
             let hermes = Arc::new(Hermes::new(Default::default()));
             let llm = Arc::new(Llm::new(Default::default()));
+            let whisper = Arc::new(Whisper::new(Default::default()));
+            let whisper_session = Arc::new(WhisperSession::new());
 
             app.manage(LumoState {
                 provider: Arc::new(Mutex::new(provider)),
                 store,
                 hermes,
                 llm,
+                whisper,
+                whisper_session,
             });
 
             // M6-D: register the global hotkeys once setup is done.
@@ -65,6 +75,12 @@ pub fn run() {
 
             // M6-E: start the clipboard monitor.
             crate::clipboard::start(app.handle().clone());
+
+            // M8-C: close-to-hide. The user can still force-quit via
+            // the global Cmd+Shift+Space hotkey (which shows again).
+            if let Some(window) = app.get_webview_window("main") {
+                crate::tray::intercept_close(&window);
+            }
 
             Ok(())
         })
@@ -96,6 +112,12 @@ pub fn run() {
             hermes::cmd_hermes_dispatch,
             llm::cmd_llm_chat,
             llm::cmd_llm_set_config,
+            whisper::cmd_whisper_set_config,
+            whisper::cmd_whisper_start,
+            whisper::cmd_whisper_push_audio_chunk,
+            tray::cmd_hide_to_tray,
+            tray::cmd_quit_app,
+            screencap::cmd_screenshot_save,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Lumo JARVIS");

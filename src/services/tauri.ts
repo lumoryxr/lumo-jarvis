@@ -159,15 +159,19 @@ export class TauriProvider implements Provider {
     }
   }
 
-  /** M7-A: Whisper sidecar start. Real impl lands in M7-B (Rust). */
-  async startWhisperCapture(_cfg: { binary?: string; model?: string; language?: string }): Promise<void> {
-    // Stub: cmd_whisper_start_capture not registered yet; useVoiceLoop
-    // catches the failure and falls back to Web Speech.
-    throw new Error('whisper sidecar not yet wired in this build');
+  /** M7-A: Whisper sidecar start. Real impl in M8-A. */
+  async startWhisperCapture(cfg: { binary?: string; model?: string; language?: string }): Promise<void> {
+    const t = await tauri();
+    await t.invoke('cmd_whisper_set_config', {
+      binary: cfg.binary ?? null,
+      model: cfg.model ?? null,
+      language: cfg.language ?? 'zh',
+    });
+    await t.invoke('cmd_whisper_start');
   }
 
   async stopWhisperCapture(): Promise<void> {
-    /* no-op until M7-B */
+    /* no-op: subprocess exits when stdin closes (M9) */
   }
 
   stop(): void {
