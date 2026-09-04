@@ -184,3 +184,4 @@ cd src-tauri && cargo check
 
 See `docs/HANDOFF.md` (and the `HANDOFF.md` inside `src-tauri/`)
 for the per-stage migration notes.
+
