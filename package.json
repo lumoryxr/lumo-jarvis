@@ -7,16 +7,28 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.4.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "@tauri-apps/plugin-fs": "^2.0.0",
+    "@tauri-apps/plugin-shell": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.11.0",
     "@types/three": "^0.185.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "three": "^0.185.1",
     "zustand": "^5.0.15"
   },
+  "optionalDependencies": {
+    "@pixiv/three-vrm": "^3.0.0"
+  },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.4.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

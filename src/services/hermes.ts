@@ -22,6 +22,7 @@
 
 export interface HermesConfig {
   baseUrl: string;
+  /** Bearer token sent as Authorization header. */
   apiKey: string;
   /** Stable identity for long-term memory scoping. */
   sessionKey?: string;

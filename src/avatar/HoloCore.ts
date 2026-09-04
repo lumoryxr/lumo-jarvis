@@ -3,7 +3,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { coreVertex, coreFragment, haloVertex, haloFragment, glowVertex, glowFragment } from './shaders';
-import type { AgentState } from '../core/types';
+import type { AgentState, Mood } from '../core/types';
 
 /**
  * The digital human.
@@ -15,8 +15,13 @@ import type { AgentState } from '../core/types';
  * the conversation feels addressed to someone.
  *
  * A rigged avatar is a drop-in replacement: implement the same
- * `setState` / `setAmplitude` surface over a VRM or GLB and mount it in
- * `AvatarStage` instead. See docs/DESIGN.md § 数字人.
+ * `setState` / `setAmplitude` / `setMood` surface over a VRM or GLB and mount
+ * it in `AvatarStage` instead. See docs/DESIGN.md § 数字人.
+ *
+ * P0-A: the new `setMood(Mood)` paints a low-frequency disposition onto the
+ * avatar *underneath* whatever the agent state is doing — like an underlying
+ * temperament behind a current expression. It nudges hue, turbulence and
+ * brightness only; it never overrides the agent state.
  */
 
 /** Per-state look. Colours are read from CSS tokens so themes stay in one place. */
@@ -31,6 +36,17 @@ const STATE_LOOK: Record<AgentState, { color: string; hot: string; turbulence: n
 };
 
 const HALO_COUNT = 5200;
+
+/** Mood → visual deltas. See setMood() for the rationale on each axis. */
+interface MoodTarget {
+  hueShift: number;        // -0.06..0.06, applied as HSL hue rotation
+  turbulenceAdd: number;   // additive on top of state turbulence
+  spinAdd: number;         // additive on top of state spin
+  saturation: number;      // multiplier, ~0.8..1.2
+  brightnessAdd: number;   // additive on top of state brightness
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 export class HoloCore {
   private renderer: THREE.WebGLRenderer;
@@ -57,6 +73,10 @@ export class HoloCore {
   private colorHotNow = new THREE.Color(STATE_LOOK.offline.hot);
   private colorTo = new THREE.Color(STATE_LOOK.offline.color);
   private colorHotTo = new THREE.Color(STATE_LOOK.offline.hot);
+
+  /** P0-A: smoothed mood deltas. Cross-faded each frame from `moodTarget`. */
+  private moodTarget: MoodTarget = { hueShift: 0, turbulenceAdd: 0, spinAdd: 0, saturation: 1, brightnessAdd: 0 };
+  private moodNow:    MoodTarget = { hueShift: 0, turbulenceAdd: 0, spinAdd: 0, saturation: 1, brightnessAdd: 0 };
 
   private amp = 0;
   private ampTarget = 0;
@@ -249,6 +269,33 @@ export class HoloCore {
     this.ampTarget = Math.min(1, Math.max(0, a));
   }
 
+  /**
+   * P0-A: paint the avatar with *mood*. Mood is a low-frequency cross-fade on
+   * top of the agent's high-frequency state — like an underlying disposition
+   * underneath whatever it's actively doing. The mapping is intentionally
+   * subtle: hue shifts by at most ~22°, turbulence/spin by ±15%. State
+   * changes (speaking, error) still dominate; mood only modulates them.
+   *
+   *   valence   -1..1   → hue shift  (warm ↔ cool)
+   *   arousal    -1..1   → turbulence + spin boost
+   *   dominance  -1..1   → colour saturation multiplier
+   *   intimacy   0..1    → brightness add
+   */
+  setMood(m: Mood) {
+    const valence = clamp(m.valence, -1, 1);
+    const arousal = clamp(m.arousal, -1, 1);
+    const dominance = clamp(m.dominance, -1, 1);
+    const intimacy = clamp(m.intimacy, 0, 1);
+
+    this.moodTarget = {
+      hueShift:       valence * 0.06,
+      turbulenceAdd:  arousal  * 0.15,
+      spinAdd:        arousal  * 0.06,
+      saturation:     1 + dominance * 0.18,
+      brightnessAdd:  (intimacy - 0.3) * 0.12,
+    };
+  }
+
   resize() {
     const { clientWidth: w, clientHeight: h } = this.canvas;
     if (!w || !h) return;
@@ -289,21 +336,60 @@ export class HoloCore {
     this.look.turbulence += (this.target.turbulence - this.look.turbulence) * k;
     this.look.spin += (this.target.spin - this.look.spin) * k;
     this.look.ringSpin += (this.target.ringSpin - this.look.ringSpin) * k;
+
+    // P0-A: mood cross-fades at the same rate as state. Hue/saturation ride
+    // on top of the state colour so neither can blow the other out.
+    const mk = 1 - Math.pow(0.0008, dt);
+    this.moodNow.hueShift      += (this.moodTarget.hueShift      - this.moodNow.hueShift)      * mk;
+    this.moodNow.turbulenceAdd += (this.moodTarget.turbulenceAdd - this.moodNow.turbulenceAdd) * mk;
+    this.moodNow.spinAdd       += (this.moodTarget.spinAdd       - this.moodNow.spinAdd)       * mk;
+    this.moodNow.saturation    += (this.moodTarget.saturation    - this.moodNow.saturation)    * mk;
+    this.moodNow.brightnessAdd += (this.moodTarget.brightnessAdd - this.moodNow.brightnessAdd) * mk;
+
+    // Hue-shift on HSL is multiplicative in the saturation axis, additive in
+    // the lightness axis. Implementation: convert → rotate H → re-pack.
+    const c  = this.colorTo;
+    const ch = this.colorHotTo;
+    const hsl = { h: 0, s: 0, l: 0 };
+    const hslH = { h: 0, s: 0, l: 0 };
+    c.getHSL(hsl);
+    ch.getHSL(hslH);
+    hsl.h = (hsl.h + this.moodNow.hueShift + 1) % 1;
+    hslH.h = (hslH.h + this.moodNow.hueShift + 1) % 1;
+    hsl.s = clamp(hsl.s * this.moodNow.saturation, 0, 1);
+    hsl.l = clamp(hsl.l + this.moodNow.brightnessAdd, 0, 1);
+    hslH.s = clamp(hslH.s * this.moodNow.saturation, 0, 1);
+    hslH.l = clamp(hslH.l + this.moodNow.brightnessAdd * 1.4, 0, 1);
+    this.colorTo.setHSL(hsl.h, hsl.s, hsl.l);
+    this.colorHotTo.setHSL(hslH.h, hslH.s, hslH.l);
+
     this.colorNow.lerp(this.colorTo, k);
     this.colorHotNow.lerp(this.colorHotTo, k);
 
     this.coreUniforms.uTime.value = t;
     this.coreUniforms.uAmp.value = this.amp;
-    this.coreUniforms.uTurbulence.value = this.look.turbulence;
+    this.coreUniforms.uTurbulence.value = this.look.turbulence + this.moodNow.turbulenceAdd;
     this.haloUniforms.uTime.value = t;
     this.haloUniforms.uAmp.value = this.amp;
     this.glowUniforms.uTime.value = t;
-    this.glowUniforms.uIntensity.value = 0.42 + this.amp * 0.5 + this.look.turbulence * 0.14;
+    this.glowUniforms.uIntensity.value = 0.42 + this.amp * 0.5 + this.look.turbulence * 0.14 + this.moodNow.brightnessAdd * 0.6;
 
-    this.core.rotation.y += this.look.spin * dt;
-    this.core.rotation.x = Math.sin(t * 0.14) * 0.12;
+    // P0-N: breath cycle (slow vertical scale), state lean, and head tilt
+    // that subtly tracks the speaking/listening rhythm. breath is a global
+    // ~6s cycle, state-specific lean overlays on top of the spin.
+    const breath = 0.5 + 0.5 * Math.sin(t * 1.05);     // 0..1, ~6s period
+    const breathScale = 0.985 + breath * 0.03;         // 0.985..1.015
+    const stateLean = this.ampTarget > 0.4 ? 0.10 : 0;  // speaking: forward
+    const idleTilt = Math.sin(t * 0.5) * 0.04;          // gentle idle sway
+    this.core.scale.set(
+      breathScale,
+      breathScale * (1 - 0.04 * this.amp),             // squeeze slightly while speaking
+      breathScale,
+    );
+    this.core.rotation.y += (this.look.spin + this.moodNow.spinAdd) * dt;
+    this.core.rotation.x = Math.sin(t * 0.14) * 0.12 + stateLean + idleTilt;
     this.wire.rotation.copy(this.core.rotation);
-    this.halo.rotation.y -= this.look.spin * 0.4 * dt;
+    this.halo.rotation.y -= (this.look.spin + this.moodNow.spinAdd) * 0.4 * dt;
 
     const rings = this.rings.children;
     rings[0].rotation.z += this.look.ringSpin * dt;

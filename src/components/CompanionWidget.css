@@ -1,0 +1,335 @@
+/* ==========================================================================
+   Companion widget — the always-present bubble.
+   Lives outside the three-column layout; positioned in viewport coords via
+   inline `left/top` so the user can drag it anywhere on screen.
+   ========================================================================== */
+
+.companion-widget {
+  position: fixed;
+  z-index: 1000;
+  /* Width/height come from windowMode.size via inline style. */
+  min-width: 220px;
+  min-height: 300px;
+  max-width: 520px;
+  max-height: 720px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  border: 1px solid var(--hairline-bright);
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 0%, rgba(53, 232, 255, 0.10), transparent 65%),
+    rgba(6, 12, 22, 0.86);
+  backdrop-filter: blur(20px) saturate(1.2);
+  box-shadow:
+    inset 0 1px 0 rgba(160, 230, 255, 0.10),
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(120, 220, 255, 0.06);
+  user-select: none;
+  touch-action: none;
+  animation: widget-rise 320ms var(--ease);
+}
+.companion-widget.is-dragging { cursor: grabbing; }
+
+@keyframes widget-rise {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* --- header strip (drag region + controls) ------------------------------ */
+
+.companion-widget__header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 8px 14px;
+  border-bottom: 1px solid var(--hairline);
+  cursor: grab;
+}
+.companion-widget__header:active { cursor: grabbing; }
+
+.companion-widget__name {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+.companion-widget__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  --tint: var(--cyan);
+}
+.companion-widget__state--offline   { --tint: var(--ink-faint); }
+.companion-widget__state--idle      { --tint: var(--cyan); }
+.companion-widget__state--listening { --tint: var(--cyan-soft); }
+.companion-widget__state--thinking  { --tint: var(--violet); }
+.companion-widget__state--speaking  { --tint: var(--cyan-soft); }
+.companion-widget__state--acting    { --tint: var(--gold); }
+.companion-widget__state--error     { --tint: var(--magenta); }
+
+.companion-widget__state-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--tint);
+  box-shadow: 0 0 8px var(--tint);
+  animation: pulse 1.8s var(--ease) infinite;
+}
+
+.companion-widget__controls {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.companion-widget__btn {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.companion-widget__btn:hover {
+  background: rgba(120, 220, 255, 0.08);
+  color: var(--cyan-soft);
+}
+
+/* --- avatar stage ------------------------------------------------------- */
+
+.companion-widget__stage {
+  position: relative;
+  flex: 1 1 60%;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 60% 55% at 50% 50%, rgba(20, 70, 105, 0.30), transparent 70%);
+}
+
+.companion-widget__canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+}
+
+.companion-widget__emotion {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: rgba(4, 10, 18, 0.55);
+  backdrop-filter: blur(8px);
+  opacity: 0.85;
+  animation: widget-emotion-in 320ms var(--ease);
+}
+.companion-widget__emotion-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--cyan-soft);
+  box-shadow: 0 0 8px var(--cyan-soft);
+}
+.companion-widget__emotion .label { color: var(--ink-dim); }
+
+@keyframes widget-emotion-in {
+  from { opacity: 0; transform: translate(-50%, -4px); }
+  to   { opacity: 0.85; transform: translate(-50%, 0); }
+}
+
+/* --- subtitle footer ---------------------------------------------------- */
+
+.companion-widget__footer {
+  flex: none;
+  padding: 8px 14px 12px;
+  border-top: 1px solid var(--hairline);
+}
+
+.companion-widget__subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  animation: widget-sub-rise 280ms var(--ease);
+}
+
+@keyframes widget-sub-rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* --- expanded chat pane ------------------------------------------------- */
+
+.companion-widget__chat {
+  flex: none;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: widget-chat-in 220ms var(--ease);
+}
+
+.companion-widget__hint {
+  margin: 0;
+  font-size: 10px;
+  color: var(--ink-faint);
+  line-height: 1.5;
+}
+
+.companion-widget__input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: rgba(4, 10, 18, 0.6);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  outline: none;
+  transition: border-color var(--fast) var(--ease);
+}
+.companion-widget__input:focus {
+  border-color: var(--hairline-bright);
+  box-shadow: 0 0 0 3px rgba(53, 232, 255, 0.10);
+}
+
+@keyframes widget-chat-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* --- resize handle ---------------------------------------------------- */
+
+.companion-widget__resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  z-index: 4;
+  /* Visual: two faint diagonal lines using a CSS gradient. */
+  background-image:
+    linear-gradient(135deg, transparent 50%, var(--hairline-bright) 50%, var(--hairline-bright) 55%, transparent 55%, transparent 70%, var(--hairline-bright) 70%, var(--hairline-bright) 75%, transparent 75%);
+  background-position: right bottom;
+  background-repeat: no-repeat;
+  background-size: 16px 16px;
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+.companion-widget:hover .companion-widget__resize,
+.companion-widget:focus-within .companion-widget__resize { opacity: 0.85; }
+.companion-widget__resize:active { opacity: 1; }
+
+/* ==========================================================================
+   Minimized state — a single 64px breathing dot.
+   The dot's colour tracks mood via inline style; emotion badge optional.
+   ========================================================================== */
+
+.companion-min-wrap {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  max-width: min(70vw, 360px);
+  /* Lift above the avatar so the whole row is clickable. */
+  padding: 6px 6px 6px 12px;
+  border-radius: 999px;
+  background: rgba(4, 10, 18, 0.45);
+  backdrop-filter: blur(6px);
+  animation: widget-rise 240ms var(--ease);
+}
+.companion-min-wrap:hover { background: rgba(120, 220, 255, 0.08); }
+
+.companion-min-preview-fade { display: none; }
+
+.companion-min {
+  position: relative;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--hairline-bright);
+  border-radius: 50%;
+  background: rgba(6, 12, 22, 0.7);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  flex: none;
+  box-shadow:
+    inset 0 1px 0 rgba(160, 230, 255, 0.10),
+    0 12px 30px rgba(0, 0, 0, 0.55);
+  transition: transform var(--fast) var(--ease);
+}
+.companion-min:hover { transform: scale(1.04); }
+
+.companion-min__core {
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  filter: blur(2px);
+  animation: min-breath 3.2s var(--ease) infinite;
+}
+
+.companion-min__emotion {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--cyan-soft);
+  box-shadow: 0 0 10px var(--cyan-soft);
+  animation: pulse 1.4s var(--ease) infinite;
+}
+
+.companion-min__think {
+  position: absolute;
+  inset: 22px;
+  border: 1px solid var(--violet);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1.4s linear infinite;
+}
+
+@keyframes min-breath {
+  0%, 100% { transform: scale(0.92); opacity: 0.85; }
+  50%      { transform: scale(1.08); opacity: 1; }
+}
+
+/* P0-L: last-message preview beside the dot. */
+.companion-min__preview {
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.3;
+  max-width: 240px;
+  padding: 4px 10px 4px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: widget-rise 240ms var(--ease);
+}

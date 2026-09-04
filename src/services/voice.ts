@@ -1,23 +1,22 @@
 /**
  * Speech in and out for the prototype, over the Web Speech API.
  *
- * This is deliberately the cheap path: it works today in a webview with no
- * model download and no native dependency. The production path — local Whisper
- * for capture and a viseme-emitting TTS for playback — is described in
- * docs/DESIGN.md § 语音链路; both sit behind this same interface.
+ * M3-C/D: Web Speech synthesis + recognition are the cheap path that
+ * works today in a webview. M3-E: barge-in — when the user starts
+ * talking while we're speaking, we cancel the current utterance and
+ * route the partial transcript to the session send().
+ * M3-F: continuous listening — start a recogniser that stays open
+ * until the user explicitly stops it, with a small VAD window that
+ * auto-flushes after 800ms of silence.
  */
 
-/**
- * `SpeechRecognition` ships in browsers but not in every lib.dom, so declare the
- * slice we use rather than pulling in an ambient dependency.
- */
 interface Recognizer {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
   onstart: (() => void) | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((e: { error?: string }) => void) | null;
   onresult: ((e: SpeechRecognitionEvent) => void) | null;
   start(): void;
   stop(): void;
@@ -39,6 +38,15 @@ export interface VoiceHandlers {
   onEnd?: () => void;
   /** 0..1 envelope, sampled from the mic while listening. */
   onLevel?: (level: number) => void;
+  /** Fires when barge-in is detected (user spoke while we were speaking). */
+  onBargeIn?: (text: string) => void;
+}
+
+export interface ContinuousOptions extends VoiceHandlers {
+  /** ms of silence before auto-flushing as final. Default 800. */
+  silenceMs?: number;
+  /** lang attribute. Default 'zh-CN'. */
+  lang?: string;
 }
 
 export class VoiceIO {
@@ -48,14 +56,17 @@ export class VoiceIO {
   private stream: MediaStream | null = null;
   private levelRaf = 0;
   private handlers: VoiceHandlers = {};
+  private silenceTimer: number | null = null;
+  private continuousMode = false;
+  private partialBuffer = '';
+  /** True while the speech synthesiser is producing audio. */
+  speaking = false;
 
   get supported() {
     return Boolean(window.SpeechRecognition ?? window.webkitSpeechRecognition);
   }
 
-  /** True while the speech synthesiser is producing audio. */
-  speaking = false;
-
+  /** Single-shot listen. */
   async listen(handlers: VoiceHandlers) {
     this.handlers = handlers;
     const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -91,21 +102,103 @@ export class VoiceIO {
     this.recognition?.stop();
     this.recognition = null;
     this.teardownMeter();
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
+    this.continuousMode = false;
   }
 
-  /** Speak `text`, reporting a synthetic envelope so the avatar can move. */
+  /**
+   * M3-F: continuous listen. The recogniser stays open across many
+   * phrases; after each utterance we let Chrome restart it. Silence
+   * longer than `silenceMs` flushes the accumulated partial as final.
+   */
+  startContinuous(opts: ContinuousOptions) {
+    const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!Recognition) throw new Error('SpeechRecognition unavailable');
+    this.continuousMode = true;
+    this.handlers = opts;
+    this.partialBuffer = '';
+    void this.openRecogniser(opts.lang ?? 'zh-CN', opts.silenceMs ?? 800);
+    void this.startMeter();
+  }
+
+  private openRecogniser(lang: string, silenceMs: number) {
+    const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!Recognition || !this.continuousMode) return;
+    const rec = new Recognition();
+    rec.lang = lang;
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.onstart = () => this.handlers.onStart?.();
+    rec.onerror = () => this.scheduleReopen(lang, silenceMs);
+    rec.onend = () => this.scheduleReopen(lang, silenceMs);
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) {
+          const txt = r[0].transcript.trim();
+          this.partialBuffer = '';
+          // M3-E: if we're currently speaking, this is barge-in.
+          if (this.speaking) {
+            this.cancelSpeech();
+            this.handlers.onBargeIn?.(txt);
+          } else {
+            this.handlers.onFinal?.(txt);
+          }
+        } else {
+          interim += r[0].transcript;
+        }
+      }
+      if (interim) {
+        this.partialBuffer = interim;
+        this.handlers.onPartial?.(interim);
+        // VAD: reset silence timer on every new partial.
+        if (this.silenceTimer) clearTimeout(this.silenceTimer);
+        this.silenceTimer = window.setTimeout(() => {
+          if (this.partialBuffer.trim() && !this.speaking) {
+            const txt = this.partialBuffer.trim();
+            this.partialBuffer = '';
+            this.handlers.onFinal?.(txt);
+          }
+        }, silenceMs);
+      }
+    };
+    this.recognition = rec;
+    try {
+      rec.start();
+    } catch {
+      this.scheduleReopen(lang, silenceMs);
+    }
+  }
+
+  private scheduleReopen(lang: string, silenceMs: number) {
+    if (!this.continuousMode) return;
+    window.setTimeout(() => this.openRecogniser(lang, silenceMs), 200);
+  }
+
+  /** Speak `text`, reporting a synthetic envelope so the avatar can move.
+   *  M3-E: while speaking, the recogniser (if continuous) will see its
+   *  onresult events fire and call onBargeIn — the avatar goes silent. */
   speak(text: string, onLevel?: (level: number) => void) {
     if (!('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
 
     const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = 'zh-CN';
+    // M6-B: pull lang + voiceURI from the persona store so the
+    // synthesiser speaks with the user's chosen voice. Falls back to
+    // the default zh-CN voice if nothing is set.
+    const persona = (window as { __lumoPersona?: { voiceURI?: string | null; voiceLang?: string } }).__lumoPersona;
+    utter.lang = persona?.voiceLang ?? 'zh-CN';
+    if (persona?.voiceURI) {
+      const match = window.speechSynthesis.getVoices().find((v) => v.voiceURI === persona.voiceURI);
+      if (match) utter.voice = match;
+    }
     utter.rate = 1.04;
     utter.pitch = 0.94;
 
-    // The Web Speech API exposes no amplitude, so drive the avatar from
-    // boundary events plus a decaying oscillator. Replaced wholesale by real
-    // viseme data once a proper TTS is wired in.
     let raf = 0;
     let energy = 0;
     const tick = () => {
@@ -156,7 +249,6 @@ export class VoiceIO {
           const x = (v - 128) / 128;
           sum += x * x;
         }
-        // RMS, scaled so ordinary speech lands around 0.5.
         this.handlers.onLevel?.(Math.min(1, Math.sqrt(sum / buf.length) * 4.2));
         this.levelRaf = requestAnimationFrame(sample);
       };

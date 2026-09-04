@@ -49,12 +49,125 @@
 .topbar__stat-v--state { color: var(--cyan); text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em; }
 .topbar__stat.is-hot .topbar__stat-v { color: var(--gold); text-shadow: 0 0 12px var(--gold); }
 
-/* --- clock ---------------------------------------------------------------- */
+/* --- right side: window mode + clock ------------------------------------ */
+
+.topbar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.topbar__mode {
+  display: flex;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 1px;
+  background: rgba(4, 10, 18, 0.4);
+}
+.topbar__mode-btn {
+  padding: 3px 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  color: var(--ink-faint);
+}
+.topbar__mode-btn .label {
+  font-size: 9px;
+  letter-spacing: 0.20em;
+  color: inherit;
+}
+.topbar__mode-btn:hover { color: var(--ink-dim); }
+.topbar__mode-btn.is-on {
+  background: rgba(53, 232, 255, 0.12);
+  color: var(--cyan);
+  box-shadow: inset 0 0 0 1px var(--hairline-bright);
+}
+.topbar__mode-btn.is-on .label { color: var(--cyan); text-shadow: 0 0 10px rgba(53, 232, 255, 0.4); }
+
+.topbar__cycle {
+  display: grid; place-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink-dim);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.topbar__cycle:hover {
+  background: rgba(120, 220, 255, 0.08);
+  color: var(--cyan-soft);
+}
+.topbar__cycle .label { font-size: 9px; letter-spacing: 0.16em; }
+
+.topbar__quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: rgba(4, 10, 18, 0.4);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-dim);
+}
+.topbar__quiet-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--lime);
+  box-shadow: 0 0 6px var(--lime);
+}
+.topbar__quiet.is-on .topbar__quiet-dot { background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+.topbar__quiet.is-on { color: var(--gold); border-color: rgba(255, 179, 71, 0.4); }
 
 .topbar__clock {
-  margin-left: auto;
   display: flex;
   align-items: baseline;
   gap: 10px;
 }
 .topbar__time { font-size: 14px; letter-spacing: 0.06em; color: var(--ink); }
+.topbar__theme {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 1px 5px;
+  margin-right: 8px;
+  cursor: pointer;
+  outline: none;
+}
+.topbar__theme:hover { color: var(--cyan-soft); border-color: var(--hairline-bright); }
+
+/* M6-F: mic + clipboard indicator pills. */
+.topbar__mic, .topbar__clip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  font-family: var(--font-mono);
+}
+.topbar__mic-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  animation: pulse 1.4s var(--ease) infinite;
+}
+.topbar__clip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lime);
+}

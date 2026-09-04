@@ -105,3 +105,29 @@
   0%   { transform: scale(0.85); opacity: 0.7; }
   100% { transform: scale(1.35); opacity: 0; }
 }
+
+/* P1-A: slash-command autocomplete hint. */
+.composer__hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  padding: 0 14px;
+  font-size: 10px;
+  color: var(--ink-dim);
+}
+.composer__hint-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.composer__hint-item .mono { color: var(--cyan); }
+
+/* P1-A: history nav indicator strip. */
+.composer__histbar {
+  margin-top: 4px;
+  padding: 0 14px;
+  font-size: 9px;
+  color: var(--ink-faint);
+  letter-spacing: 0.16em;
+}

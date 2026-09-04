@@ -31,7 +31,21 @@ export interface ToolCall {
   /** Truncated stdout / result preview. */
   output?: string;
   durationMs?: number;
+  /** P1-B: rich rendering hint. ToolCallRenderer in Conversation.tsx
+   *  uses this to decide which inner renderer to show. */
+  kind?: 'text' | 'code' | 'diff' | 'table' | 'chart' | 'log' | 'markdown';
+  /** P1-B: structured payload for table/chart/code/diff/log. */
+  payload?: ToolPayload;
 }
+
+export type ToolPayload =
+  | { kind: 'code'; language: string; code: string }
+  | { kind: 'diff'; before: string; after: string; filename?: string }
+  | { kind: 'table'; columns: string[]; rows: (string | number | null)[][]; caption?: string }
+  | { kind: 'chart'; chart: 'bar' | 'line'; series: { label: string; values: number[] }[]; xLabels: string[] }
+  | { kind: 'log'; entries: { level: 'info' | 'warn' | 'error'; message: string; ts?: number }[] }
+  | { kind: 'markdown'; text: string }
+  | { kind: 'text'; text: string };
 
 export interface Message {
   id: string;
@@ -43,6 +57,9 @@ export interface Message {
   toolCalls?: ToolCall[];
   /** Set when this turn spawned a tracked task. */
   taskId?: string;
+  /** P0-M: memories the mock surfaced while composing this reply.
+   *  Lets the user see "she used 3 things she remembered" — a trust cue. */
+  memoryRefs?: string[];
 }
 
 /* ------------------------------------------------------------------- task */
@@ -80,6 +97,12 @@ export interface Task {
   /** Free-form grouping, e.g. a repo name or project code. */
   project?: string;
   tags: string[];
+  /** P1-C: user-applied free-form labels (separate from tags). */
+  labels: string[];
+  /** P1-C: priority lane (P0 highest, P2 lowest). Default P1. */
+  priority: 0 | 1 | 2;
+  /** P1-C: stable order within the priority lane. Lower = earlier. */
+  order: number;
   steps: TaskStep[];
   /** Provider-native handle: a Hermes `run_id`, a local job id, ... */
   externalId?: string;
@@ -114,13 +137,19 @@ export interface MachineSnapshot {
 
 export type ConnectorId = 'hermes' | 'os' | 'voice' | 'llm';
 
+export type ConnectorMode = 'online' | 'degraded' | 'offline';
+
 export interface ConnectorStatus {
   id: ConnectorId;
   label: string;
   online: boolean;
+  /** P1-E: explicit tri-state status. Defaults to 'online' when online=true. */
+  status?: ConnectorMode;
   /** Short detail line, e.g. `127.0.0.1:8642` or `mock`. */
   detail: string;
   latencyMs?: number;
+  /** P1-E: epoch ms of the last status change / sync. */
+  lastSyncAt?: number;
 }
 
 /* ------------------------------------------------------------------ brief */
@@ -134,4 +163,105 @@ export interface Briefing {
   needsAttention: { taskId: string; reason: string }[];
   /** Narrative bullets summarising the session. */
   highlights: string[];
+}
+
+/* -------------------------------------------------------------- companion */
+
+/**
+ * Companion-product extensions layered on top of the assistant core.
+ *
+ * These are intentionally separate from the agent/task machine so the original
+ * IA keeps its clean responsibilities: persona / mood / memory live here, work
+ * lives in `Task` / `Message`. The two communicate through `ProviderEvent`s
+ * (`mood`, `emotion`, `proposal`, `persona-action`) — never by reaching into
+ * each other directly.
+ */
+
+/** Plutchik's 8 primary emotions + a few companion-product specifics. */
+export type Emotion =
+  | 'neutral'
+  | 'happy'
+  | 'sad'
+  | 'angry'
+  | 'surprised'
+  | 'disgusted'
+  | 'fearful'
+  | 'tender'
+  | 'playful'
+  | 'curious'
+  | 'concerned';
+
+/** Russell's circumplex — independent axes the avatar paints onto. */
+export interface Mood {
+  /** -1 (down) .. 1 (up) */
+  valence: number;
+  /** -1 (calm) .. 1 (energised) */
+  arousal: number;
+  /** -1 (yielding) .. 1 (in charge) */
+  dominance: number;
+  /** 0 (stranger) .. 1 (close). Long-term, decays very slowly. */
+  intimacy: number;
+}
+
+/** Persona presets the user picks during onboarding. */
+export type PersonaPreset =
+  | 'warm_curious'        /* default — warm + curious */
+  | 'playful_witty'        /* playful + witty */
+  | 'gentle_caring'        /* gentle + caring */
+  | 'cool_professional'   /* cool + professional */
+  | 'energetic_cheerful'   /* energetic + cheerful */
+  | 'calm_introspective'   /* calm + introspective */
+  | 'teasing_flirty'       /* teasing + flirty  — companion route default */
+  | 'mature_warm';         /* mature + warm */
+
+/** Persistent memory about the user. Decays in `confidence` over time. */
+export interface Memory {
+  id: string;
+  ts: number;
+  kind: 'fact' | 'preference' | 'event' | 'emotion' | 'goal';
+  content: string;
+  /** 0..1 — drops over time unless re-confirmed. <0.3 dropped from prompt. */
+  confidence: number;
+  source: 'told' | 'inferred' | 'observed';
+  relatedTo?: string[];
+}
+
+/** Small bodily expressions — used until M2 swaps in real viseme control. */
+export type PersonaAction =
+  | 'sigh'
+  | 'laugh'
+  | 'yawn'
+  | 'stretch'
+  | 'tilt_head'
+  | 'raise_eyebrow'
+  | 'pout'
+  | 'smile_wide'
+  | 'look_away'
+  | 'blink_slow';
+
+/** A proactive suggestion she wants to bring to the user's attention. */
+export interface Proposal {
+  id: string;
+  /** Where it came from — so the user can audit the trigger. */
+  trigger: 'morning' | 'idle' | 'task_done' | 'review_due' | 'metric_anomaly'
+         | 'inspiration' | 'anniversary' | 'playful' | 'scheduled';
+  reasoning: string;
+  /** The task she would start if approved. */
+  suggestedTask?: TaskDraft;
+  confidence: number;
+  /** ms-since-epoch — proposals expire so they don't pile up. */
+  expiresAt: number;
+  /** Optional tone — affects how she presents it. */
+  tone?: 'matter_of_fact' | 'warm' | 'playful' | 'concerned';
+  /** P1-J: if set, the proposal is queued and only surfaces on/after
+   *  this timestamp. countDown gives a friendly "in 14m" indicator. */
+  dueAt?: number;
+}
+
+export interface TaskDraft {
+  title: string;
+  intent: string;
+  executor: Task['executor'];
+  project?: string;
+  tags: string[];
 }

@@ -138,3 +138,65 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ==========================================================================
+   P1-N: theme variants. Override the base tokens under a [data-theme]
+   attribute on <html>. Components don't change — they keep referencing
+   --cyan / --ink / --panel / etc.
+   ========================================================================== */
+
+html[data-theme="warm"] {
+  --cyan:        #ffb347;
+  --cyan-soft:   #ffd29a;
+  --cyan-deep:   #8a5a16;
+  --gold:        #ff6f3c;
+  --lime:        #f7d36b;
+  --magenta:     #d12a73;
+  --violet:      #c79bff;
+  --ink:         #f6e9d3;
+  --ink-dim:     #d6b58a;
+  --ink-faint:   #8b6e4d;
+  --void:        #150806;
+  --deep:        #2a1009;
+  --panel:       rgba(40, 18, 6, 0.65);
+  --panel-solid: #2a1009;
+  --raised:      rgba(64, 32, 16, 0.42);
+  --hairline:       rgba(255, 200, 120, 0.16);
+  --hairline-bright:rgba(255, 200, 120, 0.36);
+}
+
+html[data-theme="cool"] {
+  --cyan:        #5ec0ff;
+  --cyan-soft:   #b8e4ff;
+  --cyan-deep:   #1a3d6b;
+  --gold:        #c5b27f;
+  --lime:        #7cc8d4;
+  --magenta:     #d18bff;
+  --violet:      #8b9cd4;
+  --ink:         #e8f2ff;
+  --ink-dim:     #9cb4d4;
+  --ink-faint:   #4a6584;
+  --void:        #030810;
+  --deep:        #061224;
+  --panel:       rgba(10, 22, 44, 0.6);
+  --panel-solid: #061224;
+  --raised:      rgba(18, 36, 70, 0.45);
+  --hairline:       rgba(180, 210, 255, 0.16);
+  --hairline-bright:rgba(180, 220, 255, 0.34);
+}
+
+html[data-theme="glass"] {
+  --cyan:        #7df9ff;
+  --cyan-soft:   #b8fcff;
+  --cyan-deep:   #0e7d8a;
+  --ink:         #f5fbff;
+  --ink-dim:     #b9d4e0;
+  --ink-faint:   #6a8896;
+  --void:        #0a1118;
+  --deep:        #14222e;
+  --panel:       rgba(40, 64, 84, 0.32);
+  --panel-solid: #14222e;
+  --raised:      rgba(80, 124, 156, 0.28);
+  --hairline:       rgba(180, 240, 255, 0.22);
+  --hairline-bright:rgba(180, 240, 255, 0.45);
+}
