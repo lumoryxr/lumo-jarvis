@@ -1,0 +1,83 @@
+/* M7-B: error recovery panel. */
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  min-height: 240px;
+  background: rgba(4, 10, 18, 0.4);
+  border: 1px dashed rgba(255, 179, 71, 0.5);
+  border-radius: 6px;
+}
+.error-boundary__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 520px;
+}
+.error-boundary__head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.error-boundary__icon {
+  font-size: 24px;
+  color: var(--amber);
+}
+.error-boundary__title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.error-boundary__title strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.error-boundary__msg {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--magenta);
+  background: rgba(4, 10, 18, 0.6);
+  padding: 8px 12px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow: auto;
+}
+.error-boundary__details summary {
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  margin-bottom: 4px;
+}
+.error-boundary__stack {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow: auto;
+}
+.error-boundary__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.error-boundary__btn {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.error-boundary__btn:hover { border-color: var(--hairline-bright); background: rgba(53, 232, 255, 0.06); }
+.error-boundary__btn--primary {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}

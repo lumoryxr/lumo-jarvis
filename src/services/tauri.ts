@@ -149,7 +149,7 @@ export class TauriProvider implements Provider {
     const t = await tauri();
     return t.invoke<string>('cmd_llm_chat', { input });
   }
-
+  /** Hermes health check. */
   async hermesHealth(): Promise<boolean> {
     const t = await tauri();
     try {
@@ -157,6 +157,17 @@ export class TauriProvider implements Provider {
     } catch {
       return false;
     }
+  }
+
+  /** M7-A: Whisper sidecar start. Real impl lands in M7-B (Rust). */
+  async startWhisperCapture(_cfg: { binary?: string; model?: string; language?: string }): Promise<void> {
+    // Stub: cmd_whisper_start_capture not registered yet; useVoiceLoop
+    // catches the failure and falls back to Web Speech.
+    throw new Error('whisper sidecar not yet wired in this build');
+  }
+
+  async stopWhisperCapture(): Promise<void> {
+    /* no-op until M7-B */
   }
 
   stop(): void {

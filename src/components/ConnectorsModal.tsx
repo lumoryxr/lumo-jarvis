@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from '../state/session';
 import { usePersona } from '../state/persona';
+import { useHermesHistory } from '../state/hermesHistory';
 import type { ConnectorId, ConnectorMode, ConnectorStatus } from '../core/types';
 import './ConnectorsModal.css';
 
@@ -160,6 +161,42 @@ function VoiceConfigCard() {
       <span className="connectors__config-status">
         {voices.length} 个系统音色可用
       </span>
+    </div>
+  );
+}
+
+/**
+ * HermesHistoryCard — M7-E. Shows the last 5 runs the user
+ * dispatched through cmd_hermes_dispatch (or scripted by the
+ * MockBackend). Empty state: "还没有发送过任务". */
+function HermesHistoryCard() {
+  const records = useHermesHistory((s) => s.records);
+  const clear = useHermesHistory((s) => s.clear);
+  if (records.length === 0) {
+    return <p className="connectors__history-empty">还没有发送过任务。</p>;
+  }
+  return (
+    <div className="connectors__history">
+      <div className="connectors__history-head">
+        <span className="label">最近 5 次 Hermes 任务</span>
+        <button className="connectors__btn-link" onClick={clear}>清空</button>
+      </div>
+      {records.map((r) => (
+        <div key={r.runId} className={`connectors__history-row connectors__history-row--${r.status}`}>
+          <span className={`connectors__history-dot connectors__history-dot--${r.status}`} />
+          <div className="connectors__history-main">
+            <div className="connectors__history-title">{r.title}</div>
+            <div className="connectors__history-meta">
+              <span className="mono">{r.runId.slice(0, 12)}…</span>
+              <span> · </span>
+              <span>{new Date(r.startedAt).toLocaleString('zh-CN')}</span>
+              <span> · </span>
+              <span className={`connectors__history-status connectors__history-status--${r.status}`}>{r.status}</span>
+            </div>
+            {r.preview && <pre className="connectors__history-preview">{r.preview}</pre>}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -348,7 +385,12 @@ export function ConnectorsModal({ open, onClose, focusId }: {
 
           <p className="connectors__detail-line">{active.detail}</p>
 
-          {tab === 'hermes' && <HermesConfigCard />}
+          {tab === 'hermes' && (
+            <>
+              <HermesConfigCard />
+              <HermesHistoryCard />
+            </>
+          )}
           {tab === 'llm' && <LlmConfigCard />}
           {tab === 'voice' && <VoiceConfigCard />}
           {tab === 'os' && <AvatarPresetCard />}

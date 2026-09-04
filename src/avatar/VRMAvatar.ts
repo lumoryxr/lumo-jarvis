@@ -37,6 +37,8 @@ class ProceduralAvatar {
   private leftPupil: THREE.Mesh;
   private rightPupil: THREE.Mesh;
   private glow: THREE.Mesh;
+  private eyebrowL: THREE.Mesh;
+  private eyebrowR: THREE.Mesh;
   private neck: THREE.Mesh;
   private shoulderL: THREE.Mesh;
   private shoulderR: THREE.Mesh;
@@ -133,6 +135,21 @@ class ProceduralAvatar {
     this.glow.position.z = -0.6;
     this.root.add(this.glow);
 
+    // M7-F: eyebrows. Two thin arcs above the eyes that rotate
+    // around their midpoint when setEmotion is called.
+    const eyebrowGeom = new THREE.TorusGeometry(0.18, 0.02, 8, 24, Math.PI);
+    const eyebrowMat = new THREE.MeshStandardMaterial({
+      color: 0x151a25, metalness: 0.4, roughness: 0.4,
+    });
+    this.eyebrowL = new THREE.Mesh(eyebrowGeom, eyebrowMat);
+    this.eyebrowL.position.set(-0.35, 0.95, 0.85);
+    this.eyebrowL.rotation.z = Math.PI;
+    this.root.add(this.eyebrowL);
+    this.eyebrowR = new THREE.Mesh(eyebrowGeom, eyebrowMat);
+    this.eyebrowR.position.set(0.35, 0.95, 0.85);
+    this.eyebrowR.rotation.z = 0;
+    this.root.add(this.eyebrowR);
+
     this.root.position.set(0, -0.3, 0);
   }
 
@@ -169,6 +186,33 @@ class ProceduralAvatar {
     const mat = this.head.material as THREE.MeshStandardMaterial;
     mat.emissive = c;
     mat.emissiveIntensity = 0.18;
+  }
+
+  /**
+   * M7-F: emotion-driven micro-expression. Drives the eyebrow tilt
+   * (above the eyes) based on the persona's current emotion. The
+   * eyebrows are two thin arcs that lean inward for concerned /
+   * sad, outward for happy / playful, up for surprised.
+   */
+  setEmotion(emotion: string, intensity: number) {
+    const clamped = Math.max(0, Math.min(1, intensity));
+    // Map emotion -> (left tilt, right tilt). Both default to 0.
+    const map: Record<string, [number, number]> = {
+      neutral:    [0, 0],
+      happy:      [0.08, -0.08],
+      sad:        [-0.08, -0.08],
+      angry:      [-0.18, 0.18],
+      surprised:  [0.18, 0.18],
+      disgusted:  [-0.10, 0.10],
+      fearful:    [0.12, 0.12],
+      tender:     [0.04, -0.04],
+      playful:    [0.10, 0.10],
+      curious:    [0.06, 0.06],
+      concerned:  [-0.12, -0.12],
+    };
+    const [l, r] = map[emotion] ?? [0, 0];
+    if (this.eyebrowL) this.eyebrowL.rotation.z = l * clamped;
+    if (this.eyebrowR) this.eyebrowR.rotation.z = r * clamped;
   }
 
   setAmplitude(amp: number) {
@@ -347,6 +391,13 @@ export class VRMAvatar {
 
   // M2: last-mood hex retained for future VRM blendshape tinting.
   private _lastMoodHex: number = 0x35e8ff;
+
+  // M7-F: emotion -> eyebrow tilt on the procedural avatar. The
+  // optional `?` in the JSX call sites protects the surface if we
+  // ever switch back to HoloCore (which doesn't have eyebrows).
+  setEmotion(emotion: string, intensity: number) {
+    this.procedural.setEmotion(emotion, intensity);
+  }
 
   /** Viseme stream from the conversation pipeline. The cursor advances
    *  inside the loop at 1ms per ms; we reset on a new stream. */

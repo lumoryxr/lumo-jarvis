@@ -4,6 +4,7 @@ import { SystemRail } from './components/SystemRail';
 import { AvatarStage } from './components/AvatarStage';
 import { Conversation } from './components/Conversation';
 import { Composer } from './components/Composer';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { TaskBoard } from './components/TaskBoard';
 import { CompanionWidget } from './components/CompanionWidget';
 import { MemoryConsole } from './components/MemoryConsole';
@@ -128,7 +129,9 @@ export default function App() {
             <section className="app__center panel bracketed">
               <AvatarStage />
               <div className="app__divider" />
-              <Conversation />
+              <ErrorBoundary label="对话">
+                <Conversation />
+              </ErrorBoundary>
               <Composer />
             </section>
             <TaskBoard />

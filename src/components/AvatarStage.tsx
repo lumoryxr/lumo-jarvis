@@ -111,6 +111,12 @@ export function AvatarStage() {
   // M2: amplitude drives a peak boost (M2-C mixes the viseme shape with this).
   useEffect(() => avatarRef.current?.setAmplitude(amplitude), [amplitude]);
 
+  // M7-F: emotion -> eyebrow + micro-expression. Smoothed so a sudden
+  // emotion spike doesn't snap the eyebrows.
+  useEffect(() => {
+    avatarRef.current?.setEmotion?.(emotion, emotionIntensity);
+  }, [emotion, emotionIntensity]);
+
   // Mood tints the head + lights.
   useEffect(() => {
     const av = avatarRef.current;

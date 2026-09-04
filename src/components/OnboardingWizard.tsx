@@ -60,7 +60,10 @@ export function OnboardingWizard() {
           )}
           <span className="onb__hint">{step + 1} / {STEPS.length} · {STEPS[step]}</span>
           {step < STEPS.length - 1 ? (
-            <button className="onb__btn onb__btn--primary" onClick={choices.next}>下一步 →</button>
+            <>
+              <button className="onb__btn onb__btn--ghost" onClick={choices.skip} title="使用 Lumina + 晓晓 + 陪伴档 默认">跳过</button>
+              <button className="onb__btn onb__btn--primary" onClick={choices.next}>下一步 →</button>
+            </>
           ) : (
             <button className="onb__btn onb__btn--primary" onClick={choices.commit}>完成,她到家了</button>
           )}

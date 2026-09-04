@@ -4,6 +4,45 @@ A desktop companion that lives on your taskbar: she watches your day,
 chimes in when it helps, dispatches long-running work to the local
 Hermes gateway, and lets you steer with text or full-duplex voice.
 
+> A working prototype. The frontend runs today; the Tauri backend
+> type-checks + builds + tests green. Production wiring is mostly
+> about pointing the connectors at a real LLM endpoint + a running
+> Hermes-agent gateway.
+
+## What ships
+
+* **3D avatar** — Three.js scene. Procedural humanoid by default;
+  one-click VRM presets via Cmd+. -> OS tab.
+* **Viseme mouth** — text -> CN/EN digraph table -> jaw rotation.
+* **Gaze** — pupils + head lean follow the cursor.
+* **Eyebrows + emotion micro-expressions** — driven by the persona
+  store's current emotion + intensity (M7-F).
+* **Full-duplex voice** — Cmd+Shift+V toggles continuous listening.
+  Barge-in: while she's speaking, hearing the user aborts TTS and
+  routes the partial straight into the pipeline.
+* **Real TTS voice picker** — Cmd+. -> VOICE tab lists every system
+  speechSynthesis voice, your pick is persisted to localStorage.
+* **Global hotkeys** — Cmd+Shift+Space toggles window visibility,
+  Cmd+Shift+V toggles voice loop (works without window focus).
+* **Clipboard monitor** — Rust polls every 3s, classifies URLs /
+  paths / errors / TODOs, fires a proposal in HER THOUGHTS.
+* **Connector page** — Cmd+. gives you a tabbed page covering
+  Hermes gateway config + LLM endpoint config + TTS voice picker +
+  avatar preset library.
+* **Onboarding wizard** — 5 steps + a Skip button for users who'd
+  rather use the defaults.
+
+## Build status
+
+| Step | Result |
+|---|---|
+| `npm run tsc -b` | 0 errors over 42 files |
+| `npm run lint` (oxlint) | 0 warnings / 0 errors |
+| `npm run build` | builds clean; assets code-split |
+| `cd src-tauri && cargo check` | 0 errors |
+| `cd src-tauri && cargo build` | binary builds |
+| `cd src-tauri && cargo test --tests` | 2 passed; 0 failed |
+
 ## What's inside
 
 * **React + TypeScript + Three.js + zustand** — the UI.

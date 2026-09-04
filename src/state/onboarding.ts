@@ -94,6 +94,10 @@ interface OnboardingState extends OnboardingChoices {
   setQuietHours: (start: number, end: number) => void;
   /** Persist current choices and mark onboarding as done. */
   commit: () => void;
+  /** M7-D: skip the wizard without choosing anything — uses the
+   *  built-in defaults (teasing_flirty + Lumina + 晓晓 + companion +
+   *  zh-CN) and marks onboarding as complete. */
+  skip: () => void;
   /** Push the current choices into the persona + proactiveness stores. */
   applyTo: () => void;
   /** Reopen the wizard at a chosen step. Does not touch `completed` until `commit()`. */
@@ -132,6 +136,10 @@ export const useOnboarding = create<OnboardingState>((set) => {
     setQuietHours: (quietStart, quietEnd) => set({ quietStart, quietEnd }),
 
     commit: () => set({ completed: true }),
+
+    // M7-D: skip ahead. The defaults below mirror the baseline used
+    // by state/persona.ts / state/proactiveness.ts on a fresh boot.
+    skip: () => set({ completed: true, step: 4, lastStep: 4 }),
 
     /** Apply the current choices to the persona + proactiveness stores.
    *  Call after `commit()` (or directly when reopening to refresh). */
