@@ -144,3 +144,30 @@
   outline: none;
 }
 .topbar__theme:hover { color: var(--cyan-soft); border-color: var(--hairline-bright); }
+
+/* M6-F: mic + clipboard indicator pills. */
+.topbar__mic, .topbar__clip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  font-family: var(--font-mono);
+}
+.topbar__mic-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  animation: pulse 1.4s var(--ease) infinite;
+}
+.topbar__clip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lime);
+}

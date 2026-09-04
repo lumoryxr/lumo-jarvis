@@ -187,7 +187,15 @@ export class VoiceIO {
     window.speechSynthesis.cancel();
 
     const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = 'zh-CN';
+    // M6-B: pull lang + voiceURI from the persona store so the
+    // synthesiser speaks with the user's chosen voice. Falls back to
+    // the default zh-CN voice if nothing is set.
+    const persona = (window as { __lumoPersona?: { voiceURI?: string | null; voiceLang?: string } }).__lumoPersona;
+    utter.lang = persona?.voiceLang ?? 'zh-CN';
+    if (persona?.voiceURI) {
+      const match = window.speechSynthesis.getVoices().find((v) => v.voiceURI === persona.voiceURI);
+      if (match) utter.voice = match;
+    }
     utter.rate = 1.04;
     utter.pitch = 0.94;
 

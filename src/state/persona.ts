@@ -120,6 +120,15 @@ interface PersonaState {
   tunables: { openness: number; playfulness: number; directness: number };
   setTunable: (key: 'openness' | 'playfulness' | 'directness', value: number) => void;
 
+  /* -- M6-B: voice identity --------------------------------------- */
+  /** Voice URI from the system speechSynthesis list. Persisted to
+   *  localStorage so the user doesn't have to re-pick every boot. */
+  voiceURI: string | null;
+  /** Language tag for the synthesiser — usually matched to the
+   *  voiceURI but kept separate so we can swap providers. */
+  voiceLang: string;
+  setVoice: (uri: string | null, lang: string) => void;
+
   /* -- setters driven by ProviderEvents ---------------------------------- */
   setPersona: (preset: PersonaPreset, name: string) => void;
   pushMood: (mood: Mood) => void;
@@ -157,6 +166,10 @@ export const usePersona = create<PersonaState>((set, get) => ({
 
   // P1-G: persona tunables — adjusted in the settings wizard.
   tunables: { openness: 0, playfulness: 0, directness: 0 },
+
+  // M6-B: voice identity — read from localStorage on boot.
+  voiceURI: (typeof window !== 'undefined' && localStorage.getItem('lumo.voice.uri')) || null,
+  voiceLang: (typeof window !== 'undefined' && localStorage.getItem('lumo.voice.lang')) || 'zh-CN',
 
   setPersona: (preset, name) =>
     set({ preset, name, mood: { ...PERSONA_BASELINE[preset] } }),
@@ -230,6 +243,18 @@ export const usePersona = create<PersonaState>((set, get) => ({
   setTunable: (key, value) => {
     const clamped = Math.max(-1, Math.min(1, value));
     set((s) => ({ tunables: { ...s.tunables, [key]: clamped } }));
+  },
+
+  // M6-B: voice identity setter. Mirrors the value into localStorage
+  // so it survives reloads and isn't lost when the user reopens the
+  // wizard. The TTS layer picks it up via a useEffect (see App.tsx).
+  setVoice: (uri, lang) => {
+    if (typeof window !== 'undefined') {
+      if (uri) localStorage.setItem('lumo.voice.uri', uri);
+      else localStorage.removeItem('lumo.voice.uri');
+      localStorage.setItem('lumo.voice.lang', lang);
+    }
+    set({ voiceURI: uri, voiceLang: lang });
   },
 }));
 

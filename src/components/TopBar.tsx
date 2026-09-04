@@ -17,6 +17,46 @@ import './TopBar.css';
  */
 export function TopBar() {
   const [now, setNow] = useState(() => new Date());
+  // M6-F: TopBar's mic pill mirrors the App-level voiceLoop state
+  // through window.__lumoVoiceLoop. Poll every 250ms so the pill
+  // updates when the user toggles via Cmd+Shift+V anywhere.
+  const [clipboardBlip, setClipboardBlip] = useState(false);
+  const [voiceLoop, setVoiceLoop] = useState(false);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const v = (window as unknown as { __lumoVoiceLoop?: boolean }).__lumoVoiceLoop ?? false;
+      setVoiceLoop((cur) => (cur === v ? cur : v));
+    }, 250);
+    return () => clearInterval(id);
+  }, []);
+
+  // M6-F: subscribe to clipboard.proposal events from Rust. The
+  // blip lasts 6 seconds, then fades.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let active = true;
+    let timer: number | null = null;
+    (async () => {
+      const t = (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+      if (!t) return;
+      const evt = await import('@tauri-apps/api/event').catch(() => null);
+      if (!evt) return;
+      const un = await evt.listen<{ kind: string }>('lumo:event', (e) => {
+        if (!active) return;
+        if (e.payload.kind === 'clipboard.proposal') {
+          setClipboardBlip(true);
+          if (timer) clearTimeout(timer);
+          timer = window.setTimeout(() => setClipboardBlip(false), 6000);
+        }
+      });
+      // No teardown needed for the prototype — TopBar is mounted once.
+      void un;
+    })();
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
   const agentState = useSession((s) => s.agentState);
   const tasks = useSession((s) => s.tasks);
 
@@ -133,6 +173,23 @@ export function TopBar() {
           >
             <span className="topbar__quiet-dot" aria-hidden />
             <span className="label">{quiet ? '安静中' : '在线'}</span>
+          </span>
+        )}
+
+        {/* M6-F: mic indicator. Lit while continuous listening is on. */}
+        {voiceLoop && (
+          <span className="topbar__mic" title="持续聆听中（⌘⇧V 关闭）">
+            <span className="topbar__mic-dot" />
+            <span className="label">聆听中</span>
+          </span>
+        )}
+
+        {/* M6-F: clipboard indicator. Lit briefly when a new
+            task-shaped clipboard entry was just classified by Rust. */}
+        {clipboardBlip && (
+          <span className="topbar__clip" title="刚刚剪贴板里有新内容被她看到了">
+            <span className="topbar__clip-dot" />
+            <span className="label">剪贴板</span>
           </span>
         )}
         <div className="topbar__clock">

@@ -10,7 +10,6 @@
  * do if CORS weren't a thing" fallback.
  */
 
-import type { ProviderEvent } from './provider';
 
 export interface LlmDirectConfig {
   endpoint: string;

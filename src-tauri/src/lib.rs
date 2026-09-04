@@ -10,6 +10,8 @@ pub mod error;
 pub mod watchers;
 pub mod hermes;
 pub mod llm;
+pub mod global_shortcuts;
+pub mod clipboard;
 
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -33,6 +35,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(crate::global_shortcuts::build_plugin())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()
                 .expect("no app_data_dir");
@@ -46,9 +49,7 @@ pub fn run() {
             );
             provider.start();
 
-            // M3-A: Hermes HTTP client.
             let hermes = Arc::new(Hermes::new(Default::default()));
-            // M4: real LLM turn handler.
             let llm = Arc::new(Llm::new(Default::default()));
 
             app.manage(LumoState {
@@ -57,6 +58,12 @@ pub fn run() {
                 hermes,
                 llm,
             });
+
+            // M6-D: register the global hotkeys once setup is done.
+            crate::global_shortcuts::register_all(app.handle());
+
+            // M6-E: start the clipboard monitor.
+            crate::clipboard::start(app.handle().clone());
 
             Ok(())
         })

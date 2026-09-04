@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSession } from '../state/session';
+import { usePersona } from '../state/persona';
 import type { ConnectorId, ConnectorMode, ConnectorStatus } from '../core/types';
 import './ConnectorsModal.css';
 
@@ -29,6 +30,140 @@ const ERROR_LOG: Record<ConnectorId, { ts: number; msg: string }[]> = {
 /** P1-E: a single tab-like page that surfaces every connector's status,
  *  latency, last error, and a manual retry button. Triggered by Cmd+. or
  *  by clicking a connector in the SystemRail. */
+/**
+ * AvatarPresetCard — three one-click VRM model URLs that the
+ *  user can drop into the avatar scene. The procedural fallback
+ *  stays the default; these are opt-in. Loaded URLs persist to
+ *  localStorage as `lumo.avatar.model` so AvatarStage picks them
+ *  up on next mount. */
+const AVATAR_PRESETS = [
+  {
+    id: 'luna-classic',
+    name: 'Luna (经典白)',
+    description: '日系写实短发,适合需要沉稳的场景。',
+    url: 'https://raw.githubusercontent.com/vrm-c/vrm-specification/master/specifications/1.0/assets/luna.vrm',
+  },
+  {
+    id: 'haori-default',
+    name: 'Haori (默认)',
+    description: '中性短发,经典的「她」的样子。',
+    url: 'https://raw.githubusercontent.com/vrm-c/vrm-specification/master/specifications/1.0/assets/haori.vrm',
+  },
+  {
+    id: 'procedural',
+    name: 'Procedural (程序生成)',
+    description: '内置 Three.js 人像,不需要下载任何东西。',
+    url: '',
+  },
+];
+
+function AvatarPresetCard() {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const current = typeof window !== 'undefined' ? localStorage.getItem('lumo.avatar.model') || '' : '';
+
+  async function apply(url: string, id: string) {
+    setBusy(id);
+    setStatus(null);
+    try {
+      if (url) localStorage.setItem('lumo.avatar.model', url);
+      else localStorage.removeItem('lumo.avatar.model');
+      const w = window as unknown as {
+        lumoAvatar?: { loadModel: (u: string) => Promise<void>; unloadModel: () => void };
+      };
+      if (w.lumoAvatar) {
+        if (url) await w.lumoAvatar.loadModel(url);
+        else w.lumoAvatar.unloadModel();
+        setStatus(url ? `已应用 ${id} (刷新后生效)` : '已切回程序生成');
+      } else {
+        setStatus('lumoAvatar 还没初始化,刷新后再试');
+      }
+    } catch (e) {
+      setStatus(`加载失败: ${e}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="connectors__config">
+      <div className="label">3D 头像预设</div>
+      <div className="connectors__avatar-list">
+        {AVATAR_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            className={`connectors__avatar ${current === p.url ? 'is-on' : ''}`}
+            disabled={busy === p.id}
+            onClick={() => apply(p.url, p.id)}
+          >
+            <div className="connectors__avatar-name">{p.name}</div>
+            <div className="connectors__avatar-desc">{p.description}</div>
+          </button>
+        ))}
+      </div>
+      {status && <span className="connectors__config-status">{status}</span>}
+    </div>
+  );
+}
+
+/**
+ * VoiceConfigCard — lists the system speechSynthesis voices and
+ *  writes the chosen one into usePersona.setVoice(). Persists to
+ * localStorage as lumo.voice.uri / lumo.voice.lang. The TTS layer
+ * picks the voiceURI up on the next speak() call. */
+function VoiceConfigCard() {
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const voiceURI = usePersona((s) => s.voiceURI);
+  const voiceLang = usePersona((s) => s.voiceLang);
+  const setVoice = usePersona((s) => s.setVoice);
+
+  useEffect(() => {
+    function load() {
+      const list = window.speechSynthesis?.getVoices?.() ?? [];
+      setVoices(list);
+    }
+    load();
+    // Some browsers populate the list asynchronously.
+    window.speechSynthesis?.addEventListener?.('voiceschanged', load);
+    return () => window.speechSynthesis?.removeEventListener?.('voiceschanged', load);
+  }, []);
+
+  const langs = Array.from(new Set(voices.map((v) => v.lang))).sort();
+  const filtered = voiceLang ? voices.filter((v) => v.lang === voiceLang) : voices;
+
+  return (
+    <div className="connectors__config">
+      <div className="label">语音合成（系统 TTS）</div>
+      <div className="connectors__config-row">
+        <select
+          className="connectors__input"
+          value={voiceLang}
+          onChange={(e) => setVoice(voiceURI, e.target.value)}
+        >
+          {langs.map((l) => <option key={l} value={l}>{l}</option>)}
+        </select>
+      </div>
+      <div className="connectors__config-row">
+        <select
+          className="connectors__input"
+          value={voiceURI ?? ''}
+          onChange={(e) => setVoice(e.target.value || null, voiceLang)}
+        >
+          <option value="">（系统默认）</option>
+          {filtered.map((v) => (
+            <option key={v.voiceURI} value={v.voiceURI}>
+              {v.name} · {v.lang}{v.default ? ' · default' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+      <span className="connectors__config-status">
+        {voices.length} 个系统音色可用
+      </span>
+    </div>
+  );
+}
+
 /**
  * HermesConfigCard — baseUrl + bearer token form. Submits through the
  * Tauri provider when running under Tauri; otherwise just shows the
@@ -215,6 +350,8 @@ export function ConnectorsModal({ open, onClose, focusId }: {
 
           {tab === 'hermes' && <HermesConfigCard />}
           {tab === 'llm' && <LlmConfigCard />}
+          {tab === 'voice' && <VoiceConfigCard />}
+          {tab === 'os' && <AvatarPresetCard />}
 
           <div className="connectors__actions">
             <button

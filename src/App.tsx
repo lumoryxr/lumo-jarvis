@@ -12,6 +12,7 @@ import { ActivityPanel, toggleActivityPanel } from './components/ActivityPanel';
 import { ConnectorsModal } from './components/ConnectorsModal';
 import { useOnboarding } from './state/onboarding';
 import { useSession, provider } from './state/session';
+import { usePersona } from './state/persona';
 import { useWindowMode, installWindowModeHotkeys } from './state/windowMode';
 import { useVoiceLoop } from './hooks/useVoiceLoop';
 import './App.css';
@@ -44,6 +45,44 @@ export default function App() {
 
   useEffect(() => { boot(); }, [boot]);
   useEffect(() => installWindowModeHotkeys(), []);
+
+    // M6-D: subscribe to global-shortcut events emitted by Rust.
+    // The Cmd+Shift+V shortcut (registered in src-tauri/src/global_shortcuts.rs)
+    // fires a lumo:event shortcut message that we map to the same
+    // voiceLoop toggle the in-app Cmd+Shift+V handler uses.
+    useEffect(() => {
+      const t = (window as unknown as {
+        __TAURI_INTERNALS__?: unknown;
+      }).__TAURI_INTERNALS__;
+      if (!t) return;
+      (async () => {
+        const evt = await import('@tauri-apps/api/event').catch(() => null);
+        if (!evt) return;
+        const un = await evt.listen<{ kind: string; key: string }>('lumo:event', (e) => {
+          if (e.payload.kind === 'shortcut' && e.payload.key === 'ctrlShift+V') {
+            setVoiceLoop((v) => !v);
+          }
+        });
+        return () => un();
+      })();
+    }, []);
+
+    // M6-F: bridge voiceLoop state into window for TopBar's mic pill.
+    useEffect(() => {
+      (window as unknown as { __lumoVoiceLoop?: boolean }).__lumoVoiceLoop = voiceLoop;
+    }, [voiceLoop]);
+
+  // M6-B: bridge the persona's voice identity into window so the
+  // speechSynthesis layer (services/voice.ts) can read it on each
+  // speak(). Plain zustand subscriptions inside voice.ts would
+  // couple the speech engine to React's lifecycle.
+  const persona = usePersona();
+  useEffect(() => {
+    (window as unknown as { __lumoPersona?: unknown }).__lumoPersona = {
+      voiceURI: persona.voiceURI,
+      voiceLang: persona.voiceLang,
+    };
+  }, [persona.voiceURI, persona.voiceLang]);
 
   // Cmd+, → wizard reconfigure. Cmd+M → activity panel.
   // Cmd+. → connector page (P1-E).
