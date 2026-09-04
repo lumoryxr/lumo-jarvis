@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, claude/**]
+  pull_request:
+    branches: [main, claude/**]
+
+jobs:
+  frontend:
+    name: Frontend (npm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc -b --pretty false
+      - run: npm run lint
+      - run: npm run build
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  backend:
+    name: Backend (cargo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - run: cd src-tauri && cargo check
+      - run: cd src-tauri && cargo test --tests
