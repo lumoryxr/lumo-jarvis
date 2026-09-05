@@ -216,7 +216,37 @@ export const useSession = create<SessionState>((set) => ({
       }
     });
 
-    void provider.start().then(() => set({ agentState: 'idle' }));
+    // M10: if the provider fails to start (e.g. a stale localStorage
+    // shape that breaks MockBackend.start()), still flip out of
+    // 'offline' so the user can interact. The agentState will report
+    // 'error' so the UI is honest about the failure.
+    provider
+      .start()
+      .then(() => set({ agentState: 'idle' }))
+      .catch((e) => {
+        console.error('[boot] provider.start() failed', e);
+        set({ agentState: 'error' });
+      });
+    // M10: defensive fallback. If after 1.2s the store still has
+    // 0 tasks and 0 connectors, the provider events were dropped
+    // (stale localStorage shape, a throw in MockBackend.start(),
+    // etc.). Read the seed arrays directly from the MockBackend and
+    // push them in. The next event-channel push overwrites anything
+    // stale, so this is safe.
+    setTimeout(() => {
+      const s = useSession.getState();
+      const hasContent = s.tasks.length > 0 || Object.keys(s.connectors).length > 0;
+      if (hasContent) return;
+      const mock = provider as unknown as { tasks?: Map<string, import('../core/types').Task> };
+      const tasks = mock.tasks ? Array.from(mock.tasks.values()) : [];
+      if (tasks.length) {
+        set({ tasks, agentState: 'idle' });
+        console.info('[boot] recovered tasks from MockBackend (event channel was silent)');
+      } else {
+        set({ agentState: 'error' });
+        console.warn('[boot] provider events silent; nothing to recover');
+      }
+    }, 1200);
     // Memories decay slowly in the background. No-op if no memories exist.
     startMemoryDecay();
     // P0-D: midnight reset for the daily proposal cap.
