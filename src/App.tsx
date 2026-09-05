@@ -4,8 +4,8 @@ import { SystemRail } from './components/SystemRail';
 import { AvatarStage } from './components/AvatarStage';
 import { Conversation } from './components/Conversation';
 import { Composer } from './components/Composer';
-import { ErrorBoundary } from './components/ErrorBoundary';
 import { TaskBoard } from './components/TaskBoard';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { CompanionWidget } from './components/CompanionWidget';
 import { MemoryConsole } from './components/MemoryConsole';
 import OnboardingWizard, { useIsOnboarded, openOnboardingAt } from './components/OnboardingWizard';
@@ -47,11 +47,29 @@ export default function App() {
   useEffect(() => { boot(); }, [boot]);
   useEffect(() => installWindowModeHotkeys(), []);
 
-    // M6-D: subscribe to global-shortcut events emitted by Rust.
-    // The Cmd+Shift+V shortcut (registered in src-tauri/src/global_shortcuts.rs)
-    // fires a lumo:event shortcut message that we map to the same
-    // voiceLoop toggle the in-app Cmd+Shift+V handler uses.
-    useEffect(() => {
+  // M9: `?reset=1` query param wipes every lumo.* localStorage key
+  // and reloads. Used when the user lands on a blank screen because
+  // of stale schema data from a previous build. We re-strip the
+  // query from the URL so a refresh doesn't reset again.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reset') === '1') {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('lumo.')) localStorage.removeItem(k);
+      }
+      const cleaned = window.location.pathname;
+      window.history.replaceState({}, '', cleaned);
+      window.location.reload();
+    }
+  }, []);
+
+  // M6-D: subscribe to global-shortcut events emitted by Rust.
+  // The Cmd+Shift+V shortcut (registered in src-tauri/src/global_shortcuts.rs)
+  // fires a lumo:event shortcut message that we map to the same
+  // voiceLoop toggle the in-app Cmd+Shift+V handler uses.
+  useEffect(() => {
       const t = (window as unknown as {
         __TAURI_INTERNALS__?: unknown;
       }).__TAURI_INTERNALS__;
@@ -107,7 +125,16 @@ export default function App() {
   // the persona + proactiveness stores so the avatar is named correctly on
   // first paint. The wizard handles its own applyTo on the reopen path; this
   // covers the first-commit path where the wizard itself unmounts.
-  useOnboarding.getState().applyTo();
+  //
+  // M9: wrap in try/catch. Stale localStorage from an older build
+  // can leave a completed=true with a preset id that no longer
+  // exists in the current catalogue. Without this guard an exception
+  // here would unmount the whole App tree.
+  try {
+    useOnboarding.getState().applyTo();
+  } catch (e) {
+    console.warn('[App] applyTo() failed; falling back to defaults', e);
+  }
 
   // P0-F: now that persona.name is correct, trigger the greeting on the
   // backend (if the provider supports it). MockBackend.greetNow() is a
@@ -115,34 +142,36 @@ export default function App() {
   provider.greetNow?.();
 
   return (
-    <div className="app">
-      <div className="app__bg" aria-hidden>
-        <span className="app__vignette" />
-        <span className="app__scan" />
-      </div>
+      <ErrorBoundary label="应用">
+        <div className="app">
+          <div className="app__bg" aria-hidden>
+            <span className="app__vignette" />
+            <span className="app__scan" />
+          </div>
 
-      {mode === 'full' && (
-        <>
-          <TopBar />
-          <main className="app__body">
-            <SystemRail />
-            <section className="app__center panel bracketed">
-              <AvatarStage />
-              <div className="app__divider" />
-              <ErrorBoundary label="对话">
+          {mode === 'full' && (
+            <>
+              <TopBar />
+              <main className="app__body">
+                <SystemRail />
+                <section className="app__center panel bracketed">
+                  <AvatarStage />
+                  <div className="app__divider" />
+                  <ErrorBoundary label="对话">
                 <Conversation />
               </ErrorBoundary>
               <Composer />
-            </section>
-            <TaskBoard />
-          </main>
-        </>
-      )}
+              </section>
+              <TaskBoard />
+            </main>
+          </>
+        )}
 
-      <CompanionWidget />
-      <MemoryConsole />
-      <ActivityPanel />
-      <ConnectorsModal open={connectorsOpen} onClose={() => setConnectorsOpen(false)} />
-    </div>
+        <CompanionWidget />
+        <MemoryConsole />
+        <ActivityPanel />
+        <ConnectorsModal open={connectorsOpen} onClose={() => setConnectorsOpen(false)} />
+        </div>
+    </ErrorBoundary>
   );
 }
